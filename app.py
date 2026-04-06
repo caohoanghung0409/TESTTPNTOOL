@@ -166,20 +166,6 @@ def find_shipment_col(ws):
     return None
 
 # =========================
-# AUTO WIDTH
-# =========================
-def auto_adjust_column_width(ws):
-    for col in ws.columns:
-        max_len = 0
-        col_letter = get_column_letter(col[0].column)
-
-        for cell in col:
-            if cell.value:
-                max_len = max(max_len, len(str(cell.value)))
-
-        ws.column_dimensions[col_letter].width = max_len + 3
-
-# =========================
 # UI
 # =========================
 with st.container():
@@ -254,20 +240,6 @@ with st.container():
             ketqua_numbers = set()
             count = 0
 
-            header_fill = PatternFill("solid", fgColor="000080")
-            header_font = Font(color="FFFFFF", bold=True)
-
-            for cell in ws[1]:
-                cell.fill = header_fill
-                cell.font = header_font
-                cell.alignment = Alignment(horizontal="left", vertical="center")
-
-            bold_font = Font(bold=True)
-            for row in ws.iter_rows(min_row=2):
-                for cell in row:
-                    if cell.value:
-                        cell.font = bold_font
-
             for i in range(2, ws.max_row + 1):
                 val = ws.cell(i, col_index).value
 
@@ -291,15 +263,15 @@ with st.container():
             wb.close()
 
             # =========================
-            # PROCESS FILE 2 (FIX KEYERROR + TÔ ĐÚNG SỐ)
+            # PROCESS FILE 2 (KHÔNG BOLD)
             # =========================
             df2 = pd.read_excel(path_book1, header=None, engine="openpyxl")
 
             workbook = xlsxwriter.Workbook(kehoach_path)
             worksheet = workbook.add_worksheet()
 
-            red_format = workbook.add_format({'font_color': 'red', 'bold': True})
-            normal_format = workbook.add_format({'bold': True})
+            red_format = workbook.add_format({'font_color': 'red'})  # ❌ bỏ bold
+            normal_format = workbook.add_format()  # ❌ bỏ bold
 
             for row_idx, row in df2.iterrows():
                 cell_value = str(row.iloc[0]) if pd.notna(row.iloc[0]) else ""
