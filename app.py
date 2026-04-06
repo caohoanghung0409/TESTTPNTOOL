@@ -10,6 +10,7 @@ import xlsxwriter
 
 from openpyxl import load_workbook
 from openpyxl.styles import PatternFill, Font
+from openpyxl.worksheet.views import Selection
 
 st.set_page_config(page_title="TPN TOOL ⚡", layout="centered")
 
@@ -256,18 +257,13 @@ with st.container():
                             ws.cell(i, col_index).fill = yellow
                             count += 1
 
-                # 🔥 FIX CHUẨN KHÔNG NHẢY A1
-                ws.sheet_view.topLeftCell = "A2"
-                ws.sheet_view.selection[0].activeCell = "A2"
-                ws.sheet_view.selection[0].sqref = "A2"
-
-                # 🔥 BONUS: FIX HEADER
-                ws.freeze_panes = "A2"
+                # 🔥 FIX: KHÔNG NHẢY VỀ A1
+                ws.sheet_view.selection = [Selection(activeCell="A2", sqref="A2")]
 
                 wb.save(save_path)
                 wb.close()
 
-                # ===== FILE 2 =====
+                # ===== FILE 2 GIỮ NGUYÊN =====
                 df2 = pd.read_excel(path_book1, header=None, engine="openpyxl", dtype=str)
 
                 workbook = xlsxwriter.Workbook(kehoach_path)
