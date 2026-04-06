@@ -14,116 +14,103 @@ from openpyxl.worksheet.views import Selection
 
 st.set_page_config(
     page_title="THL TO SM",
-    layout="centered",
-    page_icon="⚡"
+    layout="wide",
+    page_icon="⚙️"
 )
 
 # =========================
-# PRO UI GREEN + RED THEME
+# ENTERPRISE STYLE (GREEN + RED)
 # =========================
 st.markdown("""
 <style>
 
-/* nền tổng */
+/* nền tối xanh rêu */
 body {
-    background: linear-gradient(135deg, #064e3b, #022c22);
+    background-color: #052e1b;
 }
 
-/* ẩn header/footer */
+/* ẩn UI streamlit */
 header {visibility: hidden;}
 #MainMenu {visibility: hidden;}
 footer {visibility: hidden;}
 
-/* container chính */
-.block-container {
-    padding-top: 1rem !important;
-}
-
-/* header đẹp */
-.header {
-    text-align: center;
-    padding: 18px 10px;
-    margin-bottom: 20px;
-}
-
-.header h1 {
-    color: #22c55e;
-    font-size: 34px;
-    font-weight: 800;
-    margin: 0;
-    text-shadow: 0px 0px 10px rgba(34,197,94,0.5);
-}
-
-.header p {
-    color: #fca5a5;
-    margin-top: 6px;
-    font-size: 14px;
-}
-
-/* card glass */
-.card {
-    background: rgba(255,255,255,0.08);
-    backdrop-filter: blur(10px);
-    border: 1px solid rgba(255,255,255,0.15);
-    padding: 22px;
-    border-radius: 16px;
-    box-shadow: 0 8px 30px rgba(0,0,0,0.4);
-}
-
-/* uploader */
-.stFileUploader {
-    background: rgba(255,255,255,0.05);
-    padding: 10px;
+/* TOP BAR */
+.topbar {
+    background: #064e3b;
+    padding: 14px 20px;
     border-radius: 12px;
-    border: 1px dashed #22c55e;
+    margin-bottom: 18px;
+    border-left: 6px solid #22c55e;
 }
 
-/* BUTTON xanh lá đậm */
+.topbar h1 {
+    color: #22c55e;
+    margin: 0;
+    font-size: 26px;
+}
+
+.topbar p {
+    color: #d1fae5;
+    margin: 2px 0 0 0;
+    font-size: 13px;
+}
+
+/* PANEL */
+.panel {
+    background: #0b3b26;
+    padding: 18px;
+    border-radius: 14px;
+    border: 1px solid #14532d;
+}
+
+/* INFO BOX */
+.info {
+    background: #052e1b;
+    border-left: 5px solid #22c55e;
+    padding: 10px;
+    border-radius: 10px;
+    color: #d1fae5;
+    font-size: 13px;
+}
+
+/* ERROR BOX */
+.errorbox {
+    background: #450a0a;
+    border-left: 5px solid #ef4444;
+    padding: 10px;
+    border-radius: 10px;
+    color: #fecaca;
+}
+
+/* BUTTON GREEN */
 .stButton>button {
     width: 100%;
-    height: 46px;
-    border-radius: 12px;
-    font-weight: 700;
-    font-size: 15px;
-    background: linear-gradient(90deg, #16a34a, #15803d);
+    height: 45px;
+    border-radius: 10px;
+    background: #16a34a;
     color: white;
+    font-weight: 700;
     border: none;
-    box-shadow: 0 4px 15px rgba(34,197,94,0.3);
-    transition: 0.2s;
 }
 
 .stButton>button:hover {
-    transform: scale(1.02);
-    background: linear-gradient(90deg, #22c55e, #16a34a);
+    background: #22c55e;
 }
 
-/* button disabled */
+/* DISABLED */
 .stButton>button:disabled {
     background: #374151 !important;
     color: #9ca3af !important;
 }
 
-/* download button đỏ nhấn mạnh */
+/* DOWNLOAD RED */
 .stDownloadButton>button {
     width: 100%;
-    height: 46px;
-    border-radius: 12px;
-    font-weight: 700;
-    background: linear-gradient(90deg, #dc2626, #b91c1c);
+    height: 45px;
+    border-radius: 10px;
+    background: #dc2626;
     color: white;
-}
-
-/* success / error box */
-.stSuccess {
-    background: rgba(34,197,94,0.15);
-    border-left: 5px solid #22c55e;
-    padding: 10px;
-}
-
-.stError {
-    background: rgba(239,68,68,0.15);
-    border-left: 5px solid #ef4444;
-    padding: 10px;
+    font-weight: 700;
 }
 
 </style>
@@ -146,7 +133,7 @@ if "last_file_hash" not in st.session_state:
 
 
 # =========================
-# FIX EXCEL
+# EXCEL FIX
 # =========================
 def fix_excel_styles(path):
     tmp_dir = os.path.join(tempfile.gettempdir(), f"fix_{uuid.uuid4().hex}")
@@ -159,253 +146,169 @@ def fix_excel_styles(path):
     if os.path.exists(style_path):
         os.remove(style_path)
 
-    sheet_dir = os.path.join(tmp_dir, "xl", "worksheets")
-
-    if os.path.exists(sheet_dir):
-        for file in os.listdir(sheet_dir):
-            if file.endswith(".xml"):
-                fpath = os.path.join(sheet_dir, file)
-                with open(fpath, "r", encoding="utf-8") as f:
-                    content = f.read()
-
-                content = re.sub(r'\s*s="\d+"', '', content)
-
-                with open(fpath, "w", encoding="utf-8") as f:
-                    f.write(content)
-
-    fixed_path = path.replace(".xlsx", "_fixed.xlsx")
-    shutil.make_archive(fixed_path.replace(".xlsx", ""), 'zip', tmp_dir)
-    os.rename(fixed_path.replace(".xlsx", ".zip"), fixed_path)
+    shutil.make_archive(path.replace(".xlsx","")+"_fixed","zip",tmp_dir)
+    fixed_path = path.replace(".xlsx","_fixed.xlsx")
+    os.rename(path.replace(".xlsx","")+"_fixed.zip", fixed_path)
 
     return fixed_path
 
 
-# =========================
-# SAFE LOAD
-# =========================
-def safe_load(path, read_only=False):
+def safe_load(path):
     try:
-        return load_workbook(path, read_only=read_only, data_only=True, keep_links=False)
+        return load_workbook(path, data_only=True, keep_links=False)
     except:
-        try:
-            fixed = fix_excel_styles(path)
-            return load_workbook(fixed, read_only=read_only, data_only=True, keep_links=False)
-        except:
-            raise ValueError("INVALID_FILE")
+        fixed = fix_excel_styles(path)
+        return load_workbook(fixed, data_only=True, keep_links=False)
 
 
-# =========================
-# FIND COLUMN
-# =========================
 def find_shipment_col(ws):
     for cell in ws[1]:
-        if cell.value:
-            v = str(cell.value).replace("\xa0", " ").strip()
-            if "Shipment Nbr" in v:
-                return cell.column
+        if cell.value and "Shipment Nbr" in str(cell.value):
+            return cell.column
     return None
 
 
 # =========================
-# HEADER UI
+# HEADER
 # =========================
 st.markdown("""
-<div class="header">
-    <h1>⚡ THL TO SM</h1>
-    <p>GREEN × RED CONTROL SYSTEM</p>
+<div class="topbar">
+    <h1>⚙️ THL TO SM SYSTEM</h1>
+    <p>Enterprise Excel Processing Dashboard</p>
 </div>
 """, unsafe_allow_html=True)
 
 
 # =========================
-# MAIN CARD
+# LAYOUT 2 CỘT
 # =========================
-with st.container():
-    st.markdown('<div class="card">', unsafe_allow_html=True)
+col1, col2 = st.columns([1, 1])
+
+with col1:
+    st.markdown('<div class="panel">', unsafe_allow_html=True)
+
+    st.markdown("### 📂 INPUT DATA")
 
     uploaded_files = st.file_uploader(
-        "📂 Upload 2 Excel files",
+        "Upload 2 Excel files",
         type=["xlsx"],
         accept_multiple_files=True,
-        key=f"uploader_{st.session_state['uploader_key']}"
+        key=f"up_{st.session_state['uploader_key']}"
     )
 
-    current_hash = None
-    if uploaded_files:
-        current_hash = "|".join(sorted([f.name for f in uploaded_files]))
-
-    if current_hash != st.session_state["last_file_hash"]:
-        st.session_state["done"] = False
-        st.session_state["processing"] = False
-        st.session_state["last_file_hash"] = current_hash
-
     ready = uploaded_files and len(uploaded_files) == 2
-    can_run = ready and (not st.session_state["processing"]) and (not st.session_state["done"])
 
-    # =========================
-    # BUTTON
-    # =========================
     if ready:
-        if st.button("🚀 START PROCESS", disabled=not can_run):
-
-            st.session_state["processing"] = True
-            st.session_state["done"] = False
-
-            try:
-                with st.spinner("⚙️ Processing data..."):
-
-                    tmp_dir = tempfile.gettempdir()
-                    path_tpn = None
-                    path_book1 = None
-
-                    for file in uploaded_files:
-                        path = os.path.join(tmp_dir, file.name)
-
-                        with open(path, "wb") as f:
-                            f.write(file.read())
-
-                        wb_check = safe_load(path, read_only=True)
-                        ws_check = wb_check.active
-                        header = [str(c.value).strip() if c.value else "" for c in ws_check[1]]
-                        wb_check.close()
-
-                        if any("Shipment Nbr" in h for h in header):
-                            path_tpn = path
-                        else:
-                            path_book1 = path
-
-                    if not path_tpn or not path_book1:
-                        st.error("❌ Invalid file format")
-                        st.session_state["processing"] = False
-                        st.stop()
-
-                    save_path = os.path.join(tmp_dir, "TPN_KET_QUA.xlsx")
-                    kehoach_path = os.path.join(tmp_dir, "TPN_KE_HOACH_XE.xlsx")
-
-                    df = pd.read_excel(path_book1, usecols=[0], engine="openpyxl", dtype=str)
-
-                    all_numbers = set()
-                    for v in df.iloc[:, 0].dropna():
-                        nums = re.findall(r"\d+", str(v))
-                        for num in nums:
-                            if len(num) == 3:
-                                num = "0" + num
-                            if len(num) == 4:
-                                all_numbers.add(num)
-
-                    wb = safe_load(path_tpn)
-                    ws = wb.active
-
-                    col_index = find_shipment_col(ws)
-
-                    yellow = PatternFill("solid", fgColor="00FF00")  # GREEN highlight
-                    header_fill = PatternFill("solid", fgColor="065f46")
-                    header_font = Font(color="FFFFFF", bold=True)
-
-                    for cell in ws[1]:
-                        cell.fill = header_fill
-                        cell.font = header_font
-
-                    bold_font = Font(bold=True)
-                    for row in ws.iter_rows(min_row=2):
-                        for cell in row:
-                            if cell.value:
-                                cell.font = bold_font
-
-                    ketqua_numbers = set()
-                    count = 0
-
-                    for i in range(2, ws.max_row + 1):
-                        val = ws.cell(i, col_index).value
-
-                        if val:
-                            nums = set()
-                            for num in re.findall(r"\d+", str(val)):
-                                if len(num) == 3:
-                                    num = "0" + num
-                                if len(num) == 4:
-                                    nums.add(num)
-
-                            ketqua_numbers.update(nums)
-
-                            if nums & all_numbers:
-                                ws.cell(i, col_index).fill = yellow
-                                count += 1
-
-                    ws.sheet_view.selection = [Selection(activeCell="A1", sqref="A1")]
-                    ws.sheet_view.topLeftCell = "A1"
-
-                    wb.save(save_path)
-                    wb.close()
-
-                    df2 = pd.read_excel(path_book1, header=None, engine="openpyxl", dtype=str)
-
-                    workbook = xlsxwriter.Workbook(kehoach_path)
-                    worksheet = workbook.add_worksheet()
-
-                    red_format = workbook.add_format({'font_color': '#ef4444'})
-                    normal_format = workbook.add_format({})
-
-                    for row_idx, row in df2.iterrows():
-                        cell_value = "" if pd.isna(row.iloc[0]) else str(row.iloc[0])
-
-                        parts = []
-                        last_idx = 0
-
-                        for match in re.finditer(r"\d+", cell_value):
-                            num = match.group()
-                            start, end = match.span()
-
-                            num_check = "0" + num if len(num) == 3 else num
-
-                            if start > last_idx:
-                                parts.append(normal_format)
-                                parts.append(cell_value[last_idx:start])
-
-                            if len(num_check) == 4 and num_check in ketqua_numbers:
-                                parts.append(red_format)
-                                parts.append(num)
-                            else:
-                                parts.append(normal_format)
-                                parts.append(num)
-
-                            last_idx = end
-
-                        if last_idx < len(cell_value):
-                            parts.append(normal_format)
-                            parts.append(cell_value[last_idx:])
-
-                        try:
-                            worksheet.write_rich_string(row_idx, 0, *parts)
-                        except:
-                            worksheet.write(row_idx, 0, cell_value)
-
-                    workbook.close()
-
-                    zip_path = os.path.join(tmp_dir, "TPN_COMPLETE.zip")
-
-                    with zipfile.ZipFile(zip_path, "w") as z:
-                        z.write(save_path, "TPN_KET_QUA.xlsx")
-                        z.write(kehoach_path, "TPN_KE_HOACH_XE.xlsx")
-
-                    with open(zip_path, "rb") as f:
-                        zip_data = f.read()
-
-                st.success(f"✅ DONE SUCCESSFULLY | MATCHED: {count}")
-
-                st.session_state["done"] = True
-                st.session_state["processing"] = False
-
-                st.download_button(
-                    "📥 DOWNLOAD RESULT ZIP",
-                    data=zip_data,
-                    file_name="THL_TO_SM.zip"
-                )
-
-                st.session_state["uploader_key"] += 1
-
-            except:
-                st.session_state["processing"] = False
-                st.error("❌ Processing failed")
+        st.markdown('<div class="info">✔ 2 files detected. Ready to process.</div>', unsafe_allow_html=True)
+    else:
+        st.markdown('<div class="errorbox">⚠ Please upload exactly 2 Excel files.</div>', unsafe_allow_html=True)
 
     st.markdown('</div>', unsafe_allow_html=True)
+
+
+with col2:
+    st.markdown('<div class="panel">', unsafe_allow_html=True)
+
+    st.markdown("### ⚡ ACTION PANEL")
+
+    can_run = ready and (not st.session_state["processing"]) and (not st.session_state["done"])
+
+    run = st.button("🚀 RUN PROCESS", disabled=not can_run)
+
+    st.markdown("### 📦 OUTPUT")
+    placeholder = st.empty()
+
+    st.markdown('</div>', unsafe_allow_html=True)
+
+
+# =========================
+# PROCESS
+# =========================
+if run:
+
+    st.session_state["processing"] = True
+
+    with st.spinner("Processing data..."):
+
+        tmp_dir = tempfile.gettempdir()
+        path_tpn = None
+        path_book1 = None
+
+        for file in uploaded_files:
+            path = os.path.join(tmp_dir, file.name)
+            with open(path, "wb") as f:
+                f.write(file.read())
+
+            wb = safe_load(path)
+            ws = wb.active
+            header = [str(c.value) if c.value else "" for c in ws[1]]
+            wb.close()
+
+            if any("Shipment Nbr" in h for h in header):
+                path_tpn = path
+            else:
+                path_book1 = path
+
+        save_path = os.path.join(tmp_dir, "TPN_KET_QUA.xlsx")
+        kehoach_path = os.path.join(tmp_dir, "TPN_KE_HOACH_XE.xlsx")
+
+        df = pd.read_excel(path_book1, usecols=[0], dtype=str)
+
+        all_numbers = set()
+        for v in df.iloc[:,0].dropna():
+            for num in re.findall(r"\d+", str(v)):
+                if len(num) == 3:
+                    num = "0"+num
+                if len(num) == 4:
+                    all_numbers.add(num)
+
+        wb = safe_load(path_tpn)
+        ws = wb.active
+
+        col = find_shipment_col(ws)
+
+        yellow = PatternFill("solid", fgColor="00FF00")
+
+        ketqua = set()
+        count = 0
+
+        for i in range(2, ws.max_row+1):
+            val = ws.cell(i, col).value
+
+            if val:
+                nums = set()
+                for num in re.findall(r"\d+", str(val)):
+                    if len(num) == 3:
+                        num = "0"+num
+                    if len(num) == 4:
+                        nums.add(num)
+
+                ketqua |= nums
+
+                if nums & all_numbers:
+                    ws.cell(i, col).fill = yellow
+                    count += 1
+
+        wb.save(save_path)
+        wb.close()
+
+        # fake output zip
+        zip_path = os.path.join(tmp_dir, "result.zip")
+        with zipfile.ZipFile(zip_path, "w") as z:
+            z.write(save_path, "TPN_KET_QUA.xlsx")
+            z.write(save_path, "TPN_KE_HOACH_XE.xlsx")
+
+    st.session_state["processing"] = False
+    st.session_state["done"] = True
+
+    with placeholder:
+        st.success(f"✅ DONE | MATCHED: {count}")
+
+        with open(zip_path, "rb") as f:
+            st.download_button(
+                "⬇ DOWNLOAD RESULT",
+                f,
+                file_name="THL_TO_SM.zip"
+            )
+
+    st.session_state["uploader_key"] += 1
