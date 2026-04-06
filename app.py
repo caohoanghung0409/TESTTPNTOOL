@@ -166,6 +166,20 @@ def find_shipment_col(ws):
     return None
 
 # =========================
+# AUTO WIDTH (OPENPYXL)
+# =========================
+def auto_adjust_column_width(ws):
+    for col in ws.columns:
+        max_len = 0
+        col_letter = get_column_letter(col[0].column)
+
+        for cell in col:
+            if cell.value:
+                max_len = max(max_len, len(str(cell.value)))
+
+        ws.column_dimensions[col_letter].width = max_len + 3
+
+# =========================
 # UI
 # =========================
 with st.container():
@@ -277,18 +291,22 @@ with st.container():
             wb.close()
 
             # =========================
-            # PROCESS FILE 2 (BỎ BOLD)
+            # PROCESS FILE 2 (ĐÃ SỬA)
             # =========================
             df2 = pd.read_excel(path_book1, header=None, engine="openpyxl")
 
             workbook = xlsxwriter.Workbook(kehoach_path)
             worksheet = workbook.add_worksheet()
 
-            red_format = workbook.add_format({'font_color': 'red'})  # chỉ đỏ
-            normal_format = workbook.add_format()  # bình thường
+            red_format = workbook.add_format({'font_color': 'red'})   # ❌ bỏ bold
+            normal_format = workbook.add_format({})                   # ❌ bỏ bold
+
+            col_width = 0  # để auto width
 
             for row_idx, row in df2.iterrows():
                 cell_value = str(row.iloc[0]) if pd.notna(row.iloc[0]) else ""
+
+                col_width = max(col_width, len(cell_value))  # tính width
 
                 parts = []
                 last_idx = 0
@@ -324,6 +342,9 @@ with st.container():
                     worksheet.write_rich_string(row_idx, 0, *parts)
                 else:
                     worksheet.write(row_idx, 0, cell_value)
+
+            # ✅ AUTO WIDTH
+            worksheet.set_column(0, 0, col_width + 3)
 
             workbook.close()
 
