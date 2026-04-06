@@ -15,27 +15,50 @@ from openpyxl.worksheet.views import Selection
 st.set_page_config(page_title="THL TO SM", layout="centered")
 
 # =========================
-# CSS
+# CSS (UPDATED - GRAY BACKGROUND)
 # =========================
 st.markdown("""
 <style>
+/* Ẩn UI mặc định */
 header {display: none !important;}
 #MainMenu {visibility: hidden;}
 footer {visibility: hidden;}
 .block-container {padding-top: 0rem !important;}
 
+/* ===== BACKGROUND GRAY ===== */
+.stApp {
+    background-color: #f1f5f9 !important;
+}
+
+.stAppViewContainer {
+    background-color: #f1f5f9 !important;
+}
+
+.main {
+    background-color: #f1f5f9 !important;
+}
+
+/* Header */
 .header {text-align: center; padding: 8px 0;}
 .header h1 {color: #0284c7; margin: 0;}
 .header p {color: #64748b; margin: 0;}
 
-.card {background: white; padding: 20px; border-radius: 12px;}
+/* Card */
+.card {
+    background: white;
+    padding: 20px;
+    border-radius: 12px;
+    box-shadow: 0 4px 12px rgba(0,0,0,0.06);
+}
 
+/* Button */
 .stButton>button {
     width: 100%;
     height: 42px;
     border-radius: 10px;
     background: linear-gradient(90deg, #0ea5e9, #22c55e);
     color: white;
+    border: none;
 }
 
 .stButton>button:disabled {
@@ -43,6 +66,7 @@ footer {visibility: hidden;}
     opacity: 0.6;
 }
 
+/* Download button */
 .stDownloadButton>button {
     width: 100%;
     height: 42px;
@@ -133,7 +157,7 @@ def find_shipment_col(ws):
 
 
 # =========================
-# UI
+# UI HEADER
 # =========================
 st.markdown("""
 <div class="header">
@@ -142,6 +166,9 @@ st.markdown("""
 </div>
 """, unsafe_allow_html=True)
 
+# =========================
+# MAIN UI
+# =========================
 with st.container():
     st.markdown('<div class="card">', unsafe_allow_html=True)
 
@@ -164,9 +191,6 @@ with st.container():
     ready = uploaded_files and len(uploaded_files) == 2
     can_run = ready and (not st.session_state["processing"]) and (not st.session_state["done"])
 
-    # =========================
-    # CHỈ HIỆN NÚT KHI ĐỦ 2 FILE
-    # =========================
     if ready:
         if st.button("🚀 Bắt đầu xử lý", disabled=not can_run):
 
