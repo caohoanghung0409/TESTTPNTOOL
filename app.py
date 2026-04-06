@@ -67,8 +67,9 @@ if "done" not in st.session_state:
 if "last_file_hash" not in st.session_state:
     st.session_state["last_file_hash"] = None
 
+
 # =========================
-# FIX EXCEL
+# FIX EXCEL STRUCTURE
 # =========================
 def fix_excel_styles(path):
     tmp_dir = os.path.join(tempfile.gettempdir(), f"fix_{uuid.uuid4().hex}")
@@ -89,7 +90,9 @@ def fix_excel_styles(path):
                 fpath = os.path.join(sheet_dir, file)
                 with open(fpath, "r", encoding="utf-8") as f:
                     content = f.read()
+
                 content = re.sub(r'\s*s="\d+"', '', content)
+
                 with open(fpath, "w", encoding="utf-8") as f:
                     f.write(content)
 
@@ -99,14 +102,24 @@ def fix_excel_styles(path):
 
     return fixed_path
 
+
 # =========================
-# SAFE LOAD
+# SAFE LOAD (ĐÃ FIX LỖI FILE)
 # =========================
 def safe_load(path, read_only=False):
     try:
         return load_workbook(path, read_only=read_only, data_only=True, keep_links=False)
-    except:
-        return load_workbook(fix_excel_styles(path), read_only=read_only, data_only=True, keep_links=False)
+
+    except zipfile.BadZipFile:
+        raise ValueError("INVALID_FILE")
+
+    except Exception:
+        try:
+            fixed = fix_excel_styles(path)
+            return load_workbook(fixed, read_only=read_only, data_only=True, keep_links=False)
+        except Exception:
+            raise ValueError("INVALID_FILE")
+
 
 # =========================
 # FIND COLUMN
@@ -119,8 +132,9 @@ def find_shipment_col(ws):
                 return cell.column
     return None
 
+
 # =========================
-# UI
+# HEADER
 # =========================
 st.markdown("""
 <div class="header">
@@ -139,9 +153,7 @@ with st.container():
         key=f"uploader_{st.session_state['uploader_key']}"
     )
 
-    # =========================
-    # 🔥 FIX LỖI 2: reset state khi upload mới
-    # =========================
+    # reset state khi đổi file
     current_hash = None
     if uploaded_files:
         current_hash = "|".join(sorted([f.name for f in uploaded_files]))
@@ -152,7 +164,6 @@ with st.container():
         st.session_state["last_file_hash"] = current_hash
 
     ready = uploaded_files and len(uploaded_files) == 2
-
     can_run = ready and (not st.session_state["processing"]) and (not st.session_state["done"])
 
     # =========================
@@ -170,22 +181,40 @@ with st.container():
                 path_tpn = None
                 path_book1 = None
 
+                # =========================
+                # CHECK FILE VALIDATION (FIX ERROR HERE)
+                # =========================
                 for file in uploaded_files:
                     path = os.path.join(tmp_dir, file.name)
+
                     with open(path, "wb") as f:
                         f.write(file.read())
 
-                    wb_check = safe_load(path, read_only=True)
-                    ws_check = wb_check.active
+                    # 👉 CHẶN FILE SAI NGAY ĐÂY
+                    try:
+                        wb_check = safe_load(path, read_only=True)
+                        ws_check = wb_check.active
+                        header = [str(c.value).strip() if c.value else "" for c in ws_check[1]]
+                        wb_check.close()
 
-                    header = [str(c.value).strip() if c.value else "" for c in ws_check[1]]
-                    wb_check.close()
+                    except ValueError:
+                        st.error(f"❌ File '{file.name}' không đúng định dạng Excel hợp lệ!")
+                        st.session_state["processing"] = False
+                        st.stop()
 
                     if any("Shipment Nbr" in h for h in header):
                         path_tpn = path
                     else:
                         path_book1 = path
 
+                if not path_tpn or not path_book1:
+                    st.error("❌ Không xác định được đúng 2 loại file!")
+                    st.session_state["processing"] = False
+                    st.stop()
+
+                # =========================
+                # OUTPUT PATH
+                # =========================
                 save_path = os.path.join(tmp_dir, "TPN_KET_QUA.xlsx")
                 kehoach_path = os.path.join(tmp_dir, "TPN_KE_HOACH_XE.xlsx")
 
@@ -242,6 +271,9 @@ with st.container():
                 wb.save(save_path)
                 wb.close()
 
+                # =========================
+                # EXPORT EXCEL 2
+                # =========================
                 df2 = pd.read_excel(path_book1, header=None, engine="openpyxl", dtype=str)
 
                 workbook = xlsxwriter.Workbook(kehoach_path)
@@ -291,6 +323,9 @@ with st.container():
                 worksheet.set_column(0, 0, col_width + 3)
                 workbook.close()
 
+                # =========================
+                # ZIP OUTPUT
+                # =========================
                 zip_path = os.path.join(tmp_dir, "TPN_COMPLETE.zip")
 
                 with zipfile.ZipFile(zip_path, "w") as z:
@@ -311,11 +346,8 @@ with st.container():
                 file_name="TPN_COMPLETE.zip"
             )
 
-            # reset uploader để upload mới là chạy ngay
             st.session_state["uploader_key"] += 1
 
-        except:
+        except Exception:
             st.session_state["processing"] = False
-            raise
-
-    st.markdown('</div>', unsafe_allow_html=True)
+            st.error("❌ Có lỗi xảy ra! File không đúng định dạng hoặc bị hỏng.")
