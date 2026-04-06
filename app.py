@@ -12,44 +12,120 @@ from openpyxl import load_workbook
 from openpyxl.styles import PatternFill, Font
 from openpyxl.worksheet.views import Selection
 
-st.set_page_config(page_title="THL TO SM", layout="centered")
+st.set_page_config(
+    page_title="THL TO SM",
+    layout="centered",
+    page_icon="⚡"
+)
 
 # =========================
-# CSS
+# PRO UI GREEN + RED THEME
 # =========================
 st.markdown("""
 <style>
-header {display: none !important;}
+
+/* nền tổng */
+body {
+    background: linear-gradient(135deg, #064e3b, #022c22);
+}
+
+/* ẩn header/footer */
+header {visibility: hidden;}
 #MainMenu {visibility: hidden;}
 footer {visibility: hidden;}
-.block-container {padding-top: 0rem !important;}
 
-.header {text-align: center; padding: 8px 0;}
-.header h1 {color: #0284c7; margin: 0;}
-.header p {color: #64748b; margin: 0;}
+/* container chính */
+.block-container {
+    padding-top: 1rem !important;
+}
 
-.card {background: white; padding: 20px; border-radius: 12px;}
+/* header đẹp */
+.header {
+    text-align: center;
+    padding: 18px 10px;
+    margin-bottom: 20px;
+}
 
+.header h1 {
+    color: #22c55e;
+    font-size: 34px;
+    font-weight: 800;
+    margin: 0;
+    text-shadow: 0px 0px 10px rgba(34,197,94,0.5);
+}
+
+.header p {
+    color: #fca5a5;
+    margin-top: 6px;
+    font-size: 14px;
+}
+
+/* card glass */
+.card {
+    background: rgba(255,255,255,0.08);
+    backdrop-filter: blur(10px);
+    border: 1px solid rgba(255,255,255,0.15);
+    padding: 22px;
+    border-radius: 16px;
+    box-shadow: 0 8px 30px rgba(0,0,0,0.4);
+}
+
+/* uploader */
+.stFileUploader {
+    background: rgba(255,255,255,0.05);
+    padding: 10px;
+    border-radius: 12px;
+    border: 1px dashed #22c55e;
+}
+
+/* BUTTON xanh lá đậm */
 .stButton>button {
     width: 100%;
-    height: 42px;
-    border-radius: 10px;
-    background: linear-gradient(90deg, #0ea5e9, #22c55e);
+    height: 46px;
+    border-radius: 12px;
+    font-weight: 700;
+    font-size: 15px;
+    background: linear-gradient(90deg, #16a34a, #15803d);
     color: white;
+    border: none;
+    box-shadow: 0 4px 15px rgba(34,197,94,0.3);
+    transition: 0.2s;
 }
 
+.stButton>button:hover {
+    transform: scale(1.02);
+    background: linear-gradient(90deg, #22c55e, #16a34a);
+}
+
+/* button disabled */
 .stButton>button:disabled {
-    background: #94a3b8 !important;
-    opacity: 0.6;
+    background: #374151 !important;
+    color: #9ca3af !important;
 }
 
+/* download button đỏ nhấn mạnh */
 .stDownloadButton>button {
     width: 100%;
-    height: 42px;
-    border-radius: 10px;
-    background: #16a34a;
+    height: 46px;
+    border-radius: 12px;
+    font-weight: 700;
+    background: linear-gradient(90deg, #dc2626, #b91c1c);
     color: white;
 }
+
+/* success / error box */
+.stSuccess {
+    background: rgba(34,197,94,0.15);
+    border-left: 5px solid #22c55e;
+    padding: 10px;
+}
+
+.stError {
+    background: rgba(239,68,68,0.15);
+    border-left: 5px solid #ef4444;
+    padding: 10px;
+}
+
 </style>
 """, unsafe_allow_html=True)
 
@@ -110,13 +186,11 @@ def fix_excel_styles(path):
 def safe_load(path, read_only=False):
     try:
         return load_workbook(path, read_only=read_only, data_only=True, keep_links=False)
-    except zipfile.BadZipFile:
-        raise ValueError("INVALID_FILE")
-    except Exception:
+    except:
         try:
             fixed = fix_excel_styles(path)
             return load_workbook(fixed, read_only=read_only, data_only=True, keep_links=False)
-        except Exception:
+        except:
             raise ValueError("INVALID_FILE")
 
 
@@ -133,20 +207,24 @@ def find_shipment_col(ws):
 
 
 # =========================
-# UI
+# HEADER UI
 # =========================
 st.markdown("""
 <div class="header">
     <h1>⚡ THL TO SM</h1>
-    <p>Xử lý & đối soát Shipment nhanh chóng</p>
+    <p>GREEN × RED CONTROL SYSTEM</p>
 </div>
 """, unsafe_allow_html=True)
 
+
+# =========================
+# MAIN CARD
+# =========================
 with st.container():
     st.markdown('<div class="card">', unsafe_allow_html=True)
 
     uploaded_files = st.file_uploader(
-        "📂 Chọn 2 file Excel",
+        "📂 Upload 2 Excel files",
         type=["xlsx"],
         accept_multiple_files=True,
         key=f"uploader_{st.session_state['uploader_key']}"
@@ -165,16 +243,16 @@ with st.container():
     can_run = ready and (not st.session_state["processing"]) and (not st.session_state["done"])
 
     # =========================
-    # CHỈ HIỆN NÚT KHI ĐỦ 2 FILE
+    # BUTTON
     # =========================
     if ready:
-        if st.button("🚀 Bắt đầu xử lý", disabled=not can_run):
+        if st.button("🚀 START PROCESS", disabled=not can_run):
 
             st.session_state["processing"] = True
             st.session_state["done"] = False
 
             try:
-                with st.spinner("⏳ Đang xử lý..."):
+                with st.spinner("⚙️ Processing data..."):
 
                     tmp_dir = tempfile.gettempdir()
                     path_tpn = None
@@ -186,15 +264,10 @@ with st.container():
                         with open(path, "wb") as f:
                             f.write(file.read())
 
-                        try:
-                            wb_check = safe_load(path, read_only=True)
-                            ws_check = wb_check.active
-                            header = [str(c.value).strip() if c.value else "" for c in ws_check[1]]
-                            wb_check.close()
-                        except ValueError:
-                            st.error(f"❌ File '{file.name}' không hợp lệ!")
-                            st.session_state["processing"] = False
-                            st.stop()
+                        wb_check = safe_load(path, read_only=True)
+                        ws_check = wb_check.active
+                        header = [str(c.value).strip() if c.value else "" for c in ws_check[1]]
+                        wb_check.close()
 
                         if any("Shipment Nbr" in h for h in header):
                             path_tpn = path
@@ -202,7 +275,7 @@ with st.container():
                             path_book1 = path
 
                     if not path_tpn or not path_book1:
-                        st.error("❌ Không đúng định dạng 2 file!")
+                        st.error("❌ Invalid file format")
                         st.session_state["processing"] = False
                         st.stop()
 
@@ -225,8 +298,8 @@ with st.container():
 
                     col_index = find_shipment_col(ws)
 
-                    yellow = PatternFill("solid", fgColor="FFFF00")
-                    header_fill = PatternFill("solid", fgColor="000080")
+                    yellow = PatternFill("solid", fgColor="00FF00")  # GREEN highlight
+                    header_fill = PatternFill("solid", fgColor="065f46")
                     header_font = Font(color="FFFFFF", bold=True)
 
                     for cell in ws[1]:
@@ -270,14 +343,11 @@ with st.container():
                     workbook = xlsxwriter.Workbook(kehoach_path)
                     worksheet = workbook.add_worksheet()
 
-                    red_format = workbook.add_format({'font_color': 'red'})
+                    red_format = workbook.add_format({'font_color': '#ef4444'})
                     normal_format = workbook.add_format({})
-
-                    col_width = 0
 
                     for row_idx, row in df2.iterrows():
                         cell_value = "" if pd.isna(row.iloc[0]) else str(row.iloc[0])
-                        col_width = max(col_width, len(cell_value))
 
                         parts = []
                         last_idx = 0
@@ -310,7 +380,6 @@ with st.container():
                         except:
                             worksheet.write(row_idx, 0, cell_value)
 
-                    worksheet.set_column(0, 0, col_width + 3)
                     workbook.close()
 
                     zip_path = os.path.join(tmp_dir, "TPN_COMPLETE.zip")
@@ -322,21 +391,21 @@ with st.container():
                     with open(zip_path, "rb") as f:
                         zip_data = f.read()
 
-                st.success(f"✅ COMPLETE !!! Matched: {count}")
+                st.success(f"✅ DONE SUCCESSFULLY | MATCHED: {count}")
 
                 st.session_state["done"] = True
                 st.session_state["processing"] = False
 
                 st.download_button(
-                    "📥 Download ALL (ZIP)",
+                    "📥 DOWNLOAD RESULT ZIP",
                     data=zip_data,
-                    file_name="THL TO SM.zip"
+                    file_name="THL_TO_SM.zip"
                 )
 
                 st.session_state["uploader_key"] += 1
 
-            except Exception:
+            except:
                 st.session_state["processing"] = False
-                st.error("❌ Có lỗi xảy ra! File không hợp lệ!")
+                st.error("❌ Processing failed")
 
     st.markdown('</div>', unsafe_allow_html=True)
