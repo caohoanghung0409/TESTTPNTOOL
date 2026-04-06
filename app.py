@@ -6,6 +6,7 @@ import os
 import zipfile
 import shutil
 import uuid
+import xlsxwriter
 
 from openpyxl import load_workbook
 from openpyxl.styles import PatternFill, Font, Alignment
@@ -253,7 +254,6 @@ with st.container():
             ketqua_numbers = set()
             count = 0
 
-            # HEADER STYLE (LEFT ALIGN)
             header_fill = PatternFill("solid", fgColor="000080")
             header_font = Font(color="FFFFFF", bold=True)
 
@@ -262,14 +262,12 @@ with st.container():
                 cell.font = header_font
                 cell.alignment = Alignment(horizontal="left", vertical="center")
 
-            # BOLD DATA
             bold_font = Font(bold=True)
             for row in ws.iter_rows(min_row=2):
                 for cell in row:
                     if cell.value:
                         cell.font = bold_font
 
-            # PROCESS
             for i in range(2, ws.max_row + 1):
                 val = ws.cell(i, col_index).value
 
@@ -292,35 +290,56 @@ with st.container():
             wb.save(save_path)
             wb.close()
 
-            # PROCESS FILE 2
-            wb2 = safe_load(path_book1)
-            ws2 = wb2.active
+            # =========================
+            # PROCESS FILE 2 (CHỈ TÔ SỐ TRÙNG)
+            # =========================
+            df2 = pd.read_excel(path_book1, engine="openpyxl")
 
-            ws2.sheet_view.topLeftCell = "A1"
-            ws2.sheet_view.selection = [Selection(activeCell="A1", sqref="A1")]
+            workbook = xlsxwriter.Workbook(kehoach_path)
+            worksheet = workbook.add_worksheet()
 
-            red = Font(color="FF0000")
+            red_format = workbook.add_format({'font_color': 'red', 'bold': True})
+            normal_format = workbook.add_format({'bold': True})
 
-            for i in range(2, ws2.max_row + 1):
-                val = ws2.cell(i, 1).value
+            for row_idx, row in df2.iterrows():
+                cell_value = str(row[0]) if pd.notna(row[0]) else ""
 
-                if val:
-                    nums_raw = re.findall(r"\d+", str(val))
-                    nums = set()
+                parts = []
+                last_idx = 0
 
-                    for num in nums_raw:
-                        if len(num) == 3:
-                            num = "0" + num
-                        if len(num) == 4:
-                            nums.add(num)
+                for match in re.finditer(r"\d+", cell_value):
+                    num = match.group()
 
-                    if nums & ketqua_numbers:
-                        ws2.cell(i, 1).font = red
+                    if len(num) == 3:
+                        num_check = "0" + num
+                    else:
+                        num_check = num
 
-            auto_adjust_column_width(ws2)
+                    start, end = match.span()
 
-            wb2.save(kehoach_path)
-            wb2.close()
+                    if start > last_idx:
+                        parts.append(normal_format)
+                        parts.append(cell_value[last_idx:start])
+
+                    if len(num_check) == 4 and num_check in ketqua_numbers:
+                        parts.append(red_format)
+                        parts.append(num)
+                    else:
+                        parts.append(normal_format)
+                        parts.append(num)
+
+                    last_idx = end
+
+                if last_idx < len(cell_value):
+                    parts.append(normal_format)
+                    parts.append(cell_value[last_idx:])
+
+                if parts:
+                    worksheet.write_rich_string(row_idx, 0, *parts)
+                else:
+                    worksheet.write(row_idx, 0, cell_value)
+
+            workbook.close()
 
             # ZIP
             zip_path = os.path.join(tmp_dir, "TPN_COMPLETE.zip")
