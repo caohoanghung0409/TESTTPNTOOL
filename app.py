@@ -22,7 +22,6 @@ header {display: none !important;}
 #MainMenu {visibility: hidden;}
 footer {visibility: hidden;}
 .block-container {padding-top: 0rem !important;}
-html, body {background-color: #f1f5f9;}
 
 .header {text-align: center; padding: 8px 0;}
 .header h1 {color: #0284c7; margin: 0;}
@@ -40,9 +39,7 @@ html, body {background-color: #f1f5f9;}
 
 .stButton>button:disabled {
     background: #94a3b8 !important;
-    color: #e2e8f0 !important;
     opacity: 0.6;
-    cursor: not-allowed;
 }
 
 .stDownloadButton>button {
@@ -66,6 +63,9 @@ if "processing" not in st.session_state:
 
 if "done" not in st.session_state:
     st.session_state["done"] = False
+
+if "last_file_hash" not in st.session_state:
+    st.session_state["last_file_hash"] = None
 
 # =========================
 # FIX EXCEL
@@ -106,8 +106,7 @@ def safe_load(path, read_only=False):
     try:
         return load_workbook(path, read_only=read_only, data_only=True, keep_links=False)
     except:
-        fixed = fix_excel_styles(path)
-        return load_workbook(fixed, read_only=read_only, data_only=True, keep_links=False)
+        return load_workbook(fix_excel_styles(path), read_only=read_only, data_only=True, keep_links=False)
 
 # =========================
 # FIND COLUMN
@@ -140,9 +139,17 @@ with st.container():
         key=f"uploader_{st.session_state['uploader_key']}"
     )
 
-    # reset trạng thái khi upload sai
-    if uploaded_files and len(uploaded_files) != 2:
+    # =========================
+    # 🔥 FIX LỖI 2: reset state khi upload mới
+    # =========================
+    current_hash = None
+    if uploaded_files:
+        current_hash = "|".join(sorted([f.name for f in uploaded_files]))
+
+    if current_hash != st.session_state["last_file_hash"]:
         st.session_state["done"] = False
+        st.session_state["processing"] = False
+        st.session_state["last_file_hash"] = current_hash
 
     ready = uploaded_files and len(uploaded_files) == 2
 
@@ -171,10 +178,7 @@ with st.container():
                     wb_check = safe_load(path, read_only=True)
                     ws_check = wb_check.active
 
-                    header = [
-                        str(c.value).replace("\xa0", " ").strip() if c.value else ""
-                        for c in ws_check[1]
-                    ]
+                    header = [str(c.value).strip() if c.value else "" for c in ws_check[1]]
                     wb_check.close()
 
                     if any("Shipment Nbr" in h for h in header):
@@ -222,10 +226,8 @@ with st.container():
                     val = ws.cell(i, col_index).value
 
                     if val:
-                        nums_raw = re.findall(r"\d+", str(val))
                         nums = set()
-
-                        for num in nums_raw:
+                        for num in re.findall(r"\d+", str(val)):
                             if len(num) == 3:
                                 num = "0" + num
                             if len(num) == 4:
@@ -309,7 +311,7 @@ with st.container():
                 file_name="TPN_COMPLETE.zip"
             )
 
-            # ⭐ RESET FILE UPLOADER SAU DOWNLOAD (FIX CHÍNH)
+            # reset uploader để upload mới là chạy ngay
             st.session_state["uploader_key"] += 1
 
         except:
