@@ -12,7 +12,7 @@ from openpyxl import load_workbook
 from openpyxl.styles import PatternFill, Font
 from openpyxl.worksheet.views import Selection
 
-st.set_page_config(page_title="TPN TOOL ⚡", layout="centered")
+st.set_page_config(page_title="TPN TO SM", layout="centered")
 
 # =========================
 # CSS
