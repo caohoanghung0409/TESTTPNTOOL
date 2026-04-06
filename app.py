@@ -23,39 +23,14 @@ st.markdown("""
 header {display: none !important;}
 #MainMenu {visibility: hidden;}
 footer {visibility: hidden;}
+.block-container {padding-top: 0rem !important;}
+html, body {background-color: #f1f5f9;}
 
-[data-testid="stFileUploader"] small {
-    display: none !important;
-}
+.header {text-align: center; padding: 8px 0;}
+.header h1 {color: #0284c7; margin: 0;}
+.header p {color: #64748b; margin: 0;}
 
-.block-container {
-    padding-top: 0rem !important;
-}
-
-html, body {
-    background-color: #f1f5f9;
-}
-
-.header {
-    text-align: center;
-    padding: 8px 0;
-}
-
-.header h1 {
-    color: #0284c7;
-    margin: 0;
-}
-
-.header p {
-    color: #64748b;
-    margin: 0;
-}
-
-.card {
-    background: white;
-    padding: 20px;
-    border-radius: 12px;
-}
+.card {background: white; padding: 20px; border-radius: 12px;}
 
 .stButton>button {
     width: 100%;
@@ -72,13 +47,6 @@ html, body {
     background: #16a34a;
     color: white;
 }
-
-section[data-testid="stFileUploader"] {
-    border: 2px dashed #cbd5f5;
-    padding: 12px;
-    border-radius: 10px;
-    background: #f8fafc;
-}
 </style>
 """, unsafe_allow_html=True)
 
@@ -89,17 +57,7 @@ if "uploader_key" not in st.session_state:
     st.session_state["uploader_key"] = 0
 
 # =========================
-# HEADER
-# =========================
-st.markdown("""
-<div class="header">
-    <h1>⚡ TPN TOOL</h1>
-    <p>Xử lý & đối soát Shipment nhanh chóng</p>
-</div>
-""", unsafe_allow_html=True)
-
-# =========================
-# FIX EXCEL CORRUPT
+# FIX EXCEL (GIỮ NGUYÊN)
 # =========================
 def fix_excel_styles(path):
     tmp_dir = os.path.join(tempfile.gettempdir(), f"fix_{uuid.uuid4().hex}")
@@ -118,17 +76,13 @@ def fix_excel_styles(path):
         for file in os.listdir(sheet_dir):
             if file.endswith(".xml"):
                 fpath = os.path.join(sheet_dir, file)
-
                 with open(fpath, "r", encoding="utf-8") as f:
                     content = f.read()
-
                 content = re.sub(r'\s*s="\d+"', '', content)
-
                 with open(fpath, "w", encoding="utf-8") as f:
                     f.write(content)
 
     fixed_path = path.replace(".xlsx", "_fixed.xlsx")
-
     shutil.make_archive(fixed_path.replace(".xlsx", ""), 'zip', tmp_dir)
     os.rename(fixed_path.replace(".xlsx", ".zip"), fixed_path)
 
@@ -139,20 +93,10 @@ def fix_excel_styles(path):
 # =========================
 def safe_load(path, read_only=False):
     try:
-        return load_workbook(
-            path,
-            read_only=read_only,
-            data_only=True,
-            keep_links=False
-        )
-    except Exception:
+        return load_workbook(path, read_only=read_only, data_only=True, keep_links=False)
+    except:
         fixed = fix_excel_styles(path)
-        return load_workbook(
-            fixed,
-            read_only=read_only,
-            data_only=True,
-            keep_links=False
-        )
+        return load_workbook(fixed, read_only=read_only, data_only=True, keep_links=False)
 
 # =========================
 # FIND COLUMN
@@ -166,27 +110,20 @@ def find_shipment_col(ws):
     return None
 
 # =========================
-# AUTO WIDTH (OPENPYXL)
-# =========================
-def auto_adjust_column_width(ws):
-    for col in ws.columns:
-        max_len = 0
-        col_letter = get_column_letter(col[0].column)
-
-        for cell in col:
-            if cell.value:
-                max_len = max(max_len, len(str(cell.value)))
-
-        ws.column_dimensions[col_letter].width = max_len + 3
-
-# =========================
 # UI
 # =========================
+st.markdown("""
+<div class="header">
+    <h1>⚡ TPN TOOL</h1>
+    <p>Xử lý & đối soát Shipment nhanh chóng</p>
+</div>
+""", unsafe_allow_html=True)
+
 with st.container():
     st.markdown('<div class="card">', unsafe_allow_html=True)
 
     uploaded_files = st.file_uploader(
-        "📂 Chọn 2 file Excel cần xử lý",
+        "📂 Chọn 2 file Excel",
         type=["xlsx"],
         accept_multiple_files=True,
         key=f"uploader_{st.session_state['uploader_key']}"
@@ -206,7 +143,6 @@ with st.container():
 
             for file in uploaded_files:
                 path = os.path.join(tmp_dir, file.name)
-
                 with open(path, "wb") as f:
                     f.write(file.read())
 
@@ -214,11 +150,9 @@ with st.container():
                 ws_check = wb_check.active
 
                 header = [
-                    str(c.value).replace("\xa0", " ").strip()
-                    if c.value else ""
+                    str(c.value).replace("\xa0", " ").strip() if c.value else ""
                     for c in ws_check[1]
                 ]
-
                 wb_check.close()
 
                 if any("Shipment Nbr" in h for h in header):
@@ -229,11 +163,15 @@ with st.container():
             save_path = os.path.join(tmp_dir, "TPN_KET_QUA.xlsx")
             kehoach_path = os.path.join(tmp_dir, "TPN_KE_HOACH_XE.xlsx")
 
-            # READ FILE 2
-            df = pd.read_excel(path_book1, usecols=[0], engine="openpyxl")
+            # =========================
+            # FIX 1: GIỮ NGUYÊN TEXT (QUAN TRỌNG NHẤT)
+            # =========================
+            df = pd.read_excel(path_book1, usecols=[0], engine="openpyxl", dtype=str)
 
             all_numbers = set()
-            for v in df.iloc[:, 0].dropna().astype(str):
+
+            for v in df.iloc[:, 0].dropna():
+                v = str(v)
                 nums = re.findall(r"\d+", v)
                 for num in nums:
                     if len(num) == 3:
@@ -241,12 +179,11 @@ with st.container():
                     if len(num) == 4:
                         all_numbers.add(num)
 
-            # PROCESS FILE 1 (GIỮ NGUYÊN)
+            # =========================
+            # FILE 1
+            # =========================
             wb = safe_load(path_tpn)
             ws = wb.active
-
-            ws.sheet_view.topLeftCell = "A1"
-            ws.sheet_view.selection = [Selection(activeCell="A1", sqref="A1")]
 
             col_index = find_shipment_col(ws)
 
@@ -260,13 +197,6 @@ with st.container():
             for cell in ws[1]:
                 cell.fill = header_fill
                 cell.font = header_font
-                cell.alignment = Alignment(horizontal="left", vertical="center")
-
-            bold_font = Font(bold=True)
-            for row in ws.iter_rows(min_row=2):
-                for cell in row:
-                    if cell.value:
-                        cell.font = bold_font
 
             for i in range(2, ws.max_row + 1):
                 val = ws.cell(i, col_index).value
@@ -291,35 +221,36 @@ with st.container():
             wb.close()
 
             # =========================
-            # PROCESS FILE 2 (ĐÃ SỬA)
+            # FILE 2 (FIX MẤT KÝ TỰ)
             # =========================
-            df2 = pd.read_excel(path_book1, header=None, engine="openpyxl")
+            df2 = pd.read_excel(path_book1, header=None, engine="openpyxl", dtype=str)
 
             workbook = xlsxwriter.Workbook(kehoach_path)
             worksheet = workbook.add_worksheet()
 
-            red_format = workbook.add_format({'font_color': 'red'})   # ❌ bỏ bold
-            normal_format = workbook.add_format({})                   # ❌ bỏ bold
+            red_format = workbook.add_format({'font_color': 'red'})
+            normal_format = workbook.add_format({})
 
-            col_width = 0  # để auto width
+            col_width = 0
 
             for row_idx, row in df2.iterrows():
-                cell_value = str(row.iloc[0]) if pd.notna(row.iloc[0]) else ""
 
-                col_width = max(col_width, len(cell_value))  # tính width
+                cell_value = row.iloc[0]
+                if pd.isna(cell_value):
+                    cell_value = ""
+                else:
+                    cell_value = str(cell_value)
+
+                col_width = max(col_width, len(cell_value))
 
                 parts = []
                 last_idx = 0
 
                 for match in re.finditer(r"\d+", cell_value):
                     num = match.group()
-
-                    if len(num) == 3:
-                        num_check = "0" + num
-                    else:
-                        num_check = num
-
                     start, end = match.span()
+
+                    num_check = "0" + num if len(num) == 3 else num
 
                     if start > last_idx:
                         parts.append(normal_format)
@@ -338,12 +269,19 @@ with st.container():
                     parts.append(normal_format)
                     parts.append(cell_value[last_idx:])
 
-                if parts:
-                    worksheet.write_rich_string(row_idx, 0, *parts)
-                else:
-                    worksheet.write(row_idx, 0, cell_value)
+                # =========================
+                # FIX QUAN TRỌNG: tránh write_rich_string lỗi mất ký tự
+                # =========================
+                text_only = "".join([p for p in parts if isinstance(p, str)])
 
-            # ✅ AUTO WIDTH
+                if len(parts) <= 2:
+                    worksheet.write(row_idx, 0, cell_value)
+                else:
+                    try:
+                        worksheet.write_rich_string(row_idx, 0, *parts)
+                    except:
+                        worksheet.write(row_idx, 0, cell_value)
+
             worksheet.set_column(0, 0, col_width + 3)
 
             workbook.close()
