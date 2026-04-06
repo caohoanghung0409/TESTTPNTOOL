@@ -15,13 +15,26 @@ from openpyxl.worksheet.views import Selection
 st.set_page_config(page_title="THL TO SM", layout="centered")
 
 # =========================
-# CSS
+# CSS (FIX ẨN BADGE)
 # =========================
 st.markdown("""
 <style>
+/* Ẩn header + menu */
 header {display: none !important;}
 #MainMenu {visibility: hidden;}
 footer {visibility: hidden;}
+
+/* Ẩn badge góc phải dưới */
+div[data-testid="stDecoration"] {
+    display: none !important;
+}
+
+/* Backup nhiều trường hợp */
+div[class*="viewerBadge"] {display: none !important;}
+div[class*="badge"] {display: none !important;}
+iframe {display: none !important;}
+
+/* UI */
 .block-container {padding-top: 0rem !important;}
 
 .header {text-align: center; padding: 8px 0;}
@@ -110,10 +123,8 @@ def fix_excel_styles(path):
 def safe_load(path, read_only=False):
     try:
         return load_workbook(path, read_only=read_only, data_only=True, keep_links=False)
-
     except zipfile.BadZipFile:
         raise ValueError("INVALID_FILE")
-
     except Exception:
         try:
             fixed = fix_excel_styles(path)
@@ -257,14 +268,14 @@ with st.container():
                             ws.cell(i, col_index).fill = yellow
                             count += 1
 
-                # ✅ FIX MỞ FILE Ở A1
+                # FIX mở A1
                 ws.sheet_view.selection = [Selection(activeCell="A1", sqref="A1")]
                 ws.sheet_view.topLeftCell = "A1"
 
                 wb.save(save_path)
                 wb.close()
 
-                # ===== FILE 2 GIỮ NGUYÊN =====
+                # FILE 2
                 df2 = pd.read_excel(path_book1, header=None, engine="openpyxl", dtype=str)
 
                 workbook = xlsxwriter.Workbook(kehoach_path)
