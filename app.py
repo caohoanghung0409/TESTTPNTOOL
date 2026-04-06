@@ -12,14 +12,50 @@ from openpyxl import load_workbook
 from openpyxl.styles import PatternFill, Font
 from openpyxl.worksheet.views import Selection
 
-st.set_page_config(page_title="THL TO SM PRO", layout="centered")
+st.set_page_config(page_title="THL TO SM", layout="centered")
+
+# =========================
+# CSS
+# =========================
+st.markdown("""
+<style>
+header {display: none !important;}
+#MainMenu {visibility: hidden;}
+footer {visibility: hidden;}
+.block-container {padding-top: 0rem !important;}
+
+.header {text-align: center; padding: 8px 0;}
+.header h1 {color: #0284c7; margin: 0;}
+.header p {color: #64748b; margin: 0;}
+
+.card {background: white; padding: 20px; border-radius: 12px;}
+
+.stButton>button {
+    width: 100%;
+    height: 42px;
+    border-radius: 10px;
+    background: linear-gradient(90deg, #0ea5e9, #22c55e);
+    color: white;
+}
+
+.stButton>button:disabled {
+    background: #94a3b8 !important;
+    opacity: 0.6;
+}
+
+.stDownloadButton>button {
+    width: 100%;
+    height: 42px;
+    border-radius: 10px;
+    background: #16a34a;
+    color: white;
+}
+</style>
+""", unsafe_allow_html=True)
 
 # =========================
 # STATE
 # =========================
-if "dark" not in st.session_state:
-    st.session_state.dark = False
-
 if "uploader_key" not in st.session_state:
     st.session_state["uploader_key"] = 0
 
@@ -34,137 +70,58 @@ if "last_file_hash" not in st.session_state:
 
 
 # =========================
-# DARK MODE TOGGLE
+# FIX EXCEL
 # =========================
-dark_mode = st.toggle("🌙 Dark Mode", value=st.session_state.dark)
-st.session_state.dark = dark_mode
+def fix_excel_styles(path):
+    tmp_dir = os.path.join(tempfile.gettempdir(), f"fix_{uuid.uuid4().hex}")
+    os.makedirs(tmp_dir, exist_ok=True)
 
+    with zipfile.ZipFile(path, 'r') as zin:
+        zin.extractall(tmp_dir)
 
-# =========================
-# PRO CSS (GLASSMORPHISM + DARK MODE)
-# =========================
-bg_light = "#f1f5f9"
-bg_dark = "#0f172a"
+    style_path = os.path.join(tmp_dir, "xl", "styles.xml")
+    if os.path.exists(style_path):
+        os.remove(style_path)
 
-card_light = "rgba(255,255,255,0.7)"
-card_dark = "rgba(30,41,59,0.6)"
+    sheet_dir = os.path.join(tmp_dir, "xl", "worksheets")
 
-text_light = "#0f172a"
-text_dark = "#e2e8f0"
+    if os.path.exists(sheet_dir):
+        for file in os.listdir(sheet_dir):
+            if file.endswith(".xml"):
+                fpath = os.path.join(sheet_dir, file)
+                with open(fpath, "r", encoding="utf-8") as f:
+                    content = f.read()
 
-bg = bg_dark if dark_mode else bg_light
-card = card_dark if dark_mode else card_light
-text = text_dark if dark_mode else text_light
+                content = re.sub(r'\s*s="\d+"', '', content)
 
-st.markdown(f"""
-<style>
+                with open(fpath, "w", encoding="utf-8") as f:
+                    f.write(content)
 
-/* GLOBAL */
-.stApp {{
-    background: {bg};
-    transition: all 0.3s ease;
-}}
+    fixed_path = path.replace(".xlsx", "_fixed.xlsx")
+    shutil.make_archive(fixed_path.replace(".xlsx", ""), 'zip', tmp_dir)
+    os.rename(fixed_path.replace(".xlsx", ".zip"), fixed_path)
 
-/* hide UI */
-#MainMenu {{visibility: hidden;}}
-footer {{visibility: hidden;}}
-header {{display: none;}}
-
-/* HEADER */
-.header {{
-    text-align: center;
-    padding: 10px;
-    animation: fadeIn 1s ease;
-}}
-.header h1 {{
-    color: #38bdf8;
-    margin: 0;
-    font-size: 34px;
-}}
-.header p {{
-    color: {text};
-    opacity: 0.7;
-}}
-
-/* GLASS CARD */
-.card {{
-    background: {card};
-    backdrop-filter: blur(14px);
-    -webkit-backdrop-filter: blur(14px);
-    border-radius: 16px;
-    padding: 22px;
-    box-shadow: 0 8px 30px rgba(0,0,0,0.15);
-    border: 1px solid rgba(255,255,255,0.2);
-    animation: slideUp 0.5s ease;
-}}
-
-/* BUTTON */
-.stButton>button {{
-    width: 100%;
-    height: 44px;
-    border-radius: 12px;
-    background: linear-gradient(90deg,#0ea5e9,#22c55e);
-    color: white;
-    font-weight: 600;
-    border: none;
-    transition: 0.3s;
-}}
-
-.stButton>button:hover {{
-    transform: scale(1.02);
-}}
-
-/* DOWNLOAD */
-.stDownloadButton>button {{
-    width: 100%;
-    height: 44px;
-    border-radius: 12px;
-    background: #22c55e;
-    color: white;
-    font-weight: 600;
-}}
-
-/* ANIMATION */
-@keyframes fadeIn {{
-    from {{opacity:0}}
-    to {{opacity:1}}
-}}
-
-@keyframes slideUp {{
-    from {{transform: translateY(20px); opacity:0}}
-    to {{transform: translateY(0); opacity:1}}
-}}
-
-/* LOADING DOTS */
-.loader {{
-  display: inline-block;
-}}
-.loader:after {{
-  content: ' .';
-  animation: dots 1s steps(5, end) infinite;
-}}
-
-@keyframes dots {{
-  0%, 20% {{ color: rgba(0,0,0,0); text-shadow:
-   .25em 0 0 rgba(0,0,0,0),
-   .5em 0 0 rgba(0,0,0,0);}}
-  40% {{ color: black; text-shadow:
-   .25em 0 0 rgba(0,0,0,0),
-   .5em 0 0 rgba(0,0,0,0);}}
-  60% {{ text-shadow:
-   .25em 0 0 black,
-   .5em 0 0 rgba(0,0,0,0);}}
-  80%, 100% {{ text-shadow:
-   .25em 0 0 black,
-   .5em 0 0 black;}}
-}}
-
-</style>
-""", unsafe_allow_html=True)
+    return fixed_path
 
 
 # =========================
-# EXCEL HELPERS (GIỮ NGUYÊN LOGIC)
+# SAFE LOAD
+# =========================
+def safe_load(path, read_only=False):
+    try:
+        return load_workbook(path, read_only=read_only, data_only=True, keep_links=False)
+    except zipfile.BadZipFile:
+        raise ValueError("INVALID_FILE")
+    except Exception:
+        try:
+            fixed = fix_excel_styles(path)
+            return load_workbook(fixed, read_only=read_only, data_only=True, keep_links=False)
+        except Exception:
+            raise ValueError("INVALID_FILE")
+
+
+# =========================
+# FIND COLUMN
 # =========================
 def find_shipment_col(ws):
     for cell in ws[1]:
@@ -175,155 +132,211 @@ def find_shipment_col(ws):
     return None
 
 
-def safe_load(path):
-    return load_workbook(path, data_only=True, keep_links=False)
-
-
 # =========================
-# UI HEADER
+# UI
 # =========================
 st.markdown("""
 <div class="header">
-    <h1>⚡ THL TO SM PRO</h1>
-    <p>Glassmorphism • Fast Processing • Pro UI</p>
+    <h1>⚡ THL TO SM</h1>
+    <p>Xử lý & đối soát Shipment nhanh chóng</p>
 </div>
 """, unsafe_allow_html=True)
 
+with st.container():
+    st.markdown('<div class="card">', unsafe_allow_html=True)
 
-# =========================
-# CARD UI
-# =========================
-st.markdown('<div class="card">', unsafe_allow_html=True)
+    uploaded_files = st.file_uploader(
+        "📂 Chọn 2 file Excel",
+        type=["xlsx"],
+        accept_multiple_files=True,
+        key=f"uploader_{st.session_state['uploader_key']}"
+    )
 
-uploaded_files = st.file_uploader(
-    "📂 Upload 2 Excel files",
-    type=["xlsx"],
-    accept_multiple_files=True,
-    key=f"up_{st.session_state['uploader_key']}"
-)
+    current_hash = None
+    if uploaded_files:
+        current_hash = "|".join(sorted([f.name for f in uploaded_files]))
 
-current_hash = "|".join(sorted([f.name for f in uploaded_files])) if uploaded_files else None
+    if current_hash != st.session_state["last_file_hash"]:
+        st.session_state["done"] = False
+        st.session_state["processing"] = False
+        st.session_state["last_file_hash"] = current_hash
 
-if current_hash != st.session_state["last_file_hash"]:
-    st.session_state["done"] = False
-    st.session_state["processing"] = False
-    st.session_state["last_file_hash"] = current_hash
+    ready = uploaded_files and len(uploaded_files) == 2
+    can_run = ready and (not st.session_state["processing"]) and (not st.session_state["done"])
 
+    # =========================
+    # CHỈ HIỆN NÚT KHI ĐỦ 2 FILE
+    # =========================
+    if ready:
+        if st.button("🚀 Bắt đầu xử lý", disabled=not can_run):
 
-ready = uploaded_files and len(uploaded_files) == 2
-can_run = ready and not st.session_state["processing"] and not st.session_state["done"]
+            st.session_state["processing"] = True
+            st.session_state["done"] = False
 
+            try:
+                with st.spinner("⏳ Đang xử lý..."):
 
-# =========================
-# PROGRESS BAR PLACEHOLDER
-# =========================
-progress = st.progress(0)
-status = st.empty()
+                    tmp_dir = tempfile.gettempdir()
+                    path_tpn = None
+                    path_book1 = None
 
+                    for file in uploaded_files:
+                        path = os.path.join(tmp_dir, file.name)
 
-if ready:
-    if st.button("🚀 START PROCESS", disabled=not can_run):
+                        with open(path, "wb") as f:
+                            f.write(file.read())
 
-        st.session_state["processing"] = True
+                        try:
+                            wb_check = safe_load(path, read_only=True)
+                            ws_check = wb_check.active
+                            header = [str(c.value).strip() if c.value else "" for c in ws_check[1]]
+                            wb_check.close()
+                        except ValueError:
+                            st.error(f"❌ File '{file.name}' không hợp lệ!")
+                            st.session_state["processing"] = False
+                            st.stop()
 
-        try:
-            status.markdown("⏳ Starting...")
-            progress.progress(10)
+                        if any("Shipment Nbr" in h for h in header):
+                            path_tpn = path
+                        else:
+                            path_book1 = path
 
-            tmp_dir = tempfile.gettempdir()
-            path_tpn = None
-            path_book1 = None
+                    if not path_tpn or not path_book1:
+                        st.error("❌ Không đúng định dạng 2 file!")
+                        st.session_state["processing"] = False
+                        st.stop()
 
-            # save files
-            for i, file in enumerate(uploaded_files):
-                path = os.path.join(tmp_dir, file.name)
-                with open(path, "wb") as f:
-                    f.write(file.read())
+                    save_path = os.path.join(tmp_dir, "TPN_KET_QUA.xlsx")
+                    kehoach_path = os.path.join(tmp_dir, "TPN_KE_HOACH_XE.xlsx")
 
-                wb = safe_load(path)
-                ws = wb.active
-                header = [str(c.value).strip() if c.value else "" for c in ws[1]]
+                    df = pd.read_excel(path_book1, usecols=[0], engine="openpyxl", dtype=str)
 
-                if any("Shipment Nbr" in h for h in header):
-                    path_tpn = path
-                else:
-                    path_book1 = path
+                    all_numbers = set()
+                    for v in df.iloc[:, 0].dropna():
+                        nums = re.findall(r"\d+", str(v))
+                        for num in nums:
+                            if len(num) == 3:
+                                num = "0" + num
+                            if len(num) == 4:
+                                all_numbers.add(num)
 
-            progress.progress(30)
-            status.markdown("📊 Reading data...")
+                    wb = safe_load(path_tpn)
+                    ws = wb.active
 
-            # process logic
-            df = pd.read_excel(path_book1, usecols=[0], dtype=str)
+                    col_index = find_shipment_col(ws)
 
-            all_numbers = set()
-            for v in df.iloc[:, 0].dropna():
-                for num in re.findall(r"\d+", str(v)):
-                    if len(num) == 3:
-                        num = "0" + num
-                    if len(num) == 4:
-                        all_numbers.add(num)
+                    yellow = PatternFill("solid", fgColor="FFFF00")
+                    header_fill = PatternFill("solid", fgColor="000080")
+                    header_font = Font(color="FFFFFF", bold=True)
 
-            wb = safe_load(path_tpn)
-            ws = wb.active
+                    for cell in ws[1]:
+                        cell.fill = header_fill
+                        cell.font = header_font
 
-            col_index = find_shipment_col(ws)
+                    bold_font = Font(bold=True)
+                    for row in ws.iter_rows(min_row=2):
+                        for cell in row:
+                            if cell.value:
+                                cell.font = bold_font
 
-            yellow = PatternFill("solid", fgColor="FFFF00")
+                    ketqua_numbers = set()
+                    count = 0
 
-            progress.progress(55)
-            status.markdown("🧠 Processing Excel...")
+                    for i in range(2, ws.max_row + 1):
+                        val = ws.cell(i, col_index).value
 
-            ketqua_numbers = set()
-            count = 0
+                        if val:
+                            nums = set()
+                            for num in re.findall(r"\d+", str(val)):
+                                if len(num) == 3:
+                                    num = "0" + num
+                                if len(num) == 4:
+                                    nums.add(num)
 
-            for i in range(2, ws.max_row + 1):
-                val = ws.cell(i, col_index).value
+                            ketqua_numbers.update(nums)
 
-                if val:
-                    nums = set()
-                    for num in re.findall(r"\d+", str(val)):
-                        if len(num) == 3:
-                            num = "0" + num
-                        if len(num) == 4:
-                            nums.add(num)
+                            if nums & all_numbers:
+                                ws.cell(i, col_index).fill = yellow
+                                count += 1
 
-                    ketqua_numbers.update(nums)
+                    ws.sheet_view.selection = [Selection(activeCell="A1", sqref="A1")]
+                    ws.sheet_view.topLeftCell = "A1"
 
-                    if nums & all_numbers:
-                        ws.cell(i, col_index).fill = yellow
-                        count += 1
+                    wb.save(save_path)
+                    wb.close()
 
-            save_path = os.path.join(tmp_dir, "TPN_RESULT.xlsx")
-            wb.save(save_path)
-            wb.close()
+                    df2 = pd.read_excel(path_book1, header=None, engine="openpyxl", dtype=str)
 
-            progress.progress(80)
-            status.markdown("📦 Creating file...")
+                    workbook = xlsxwriter.Workbook(kehoach_path)
+                    worksheet = workbook.add_worksheet()
 
-            zip_path = os.path.join(tmp_dir, "result.zip")
-            with zipfile.ZipFile(zip_path, "w") as z:
-                z.write(save_path, "TPN_RESULT.xlsx")
+                    red_format = workbook.add_format({'font_color': 'red'})
+                    normal_format = workbook.add_format({})
 
-            with open(zip_path, "rb") as f:
-                zip_data = f.read()
+                    col_width = 0
 
-            progress.progress(100)
-            status.markdown("✅ Done!")
+                    for row_idx, row in df2.iterrows():
+                        cell_value = "" if pd.isna(row.iloc[0]) else str(row.iloc[0])
+                        col_width = max(col_width, len(cell_value))
 
-            st.success(f"Matched: {count}")
+                        parts = []
+                        last_idx = 0
 
-            st.download_button(
-                "📥 Download ZIP",
-                data=zip_data,
-                file_name="THL_TO_SM.zip"
-            )
+                        for match in re.finditer(r"\d+", cell_value):
+                            num = match.group()
+                            start, end = match.span()
 
-            st.session_state["done"] = True
-            st.session_state["processing"] = False
-            st.session_state["uploader_key"] += 1
+                            num_check = "0" + num if len(num) == 3 else num
 
-        except Exception as e:
-            st.session_state["processing"] = False
-            st.error(f"❌ Error: {e}")
+                            if start > last_idx:
+                                parts.append(normal_format)
+                                parts.append(cell_value[last_idx:start])
 
-st.markdown("</div>", unsafe_allow_html=True)
+                            if len(num_check) == 4 and num_check in ketqua_numbers:
+                                parts.append(red_format)
+                                parts.append(num)
+                            else:
+                                parts.append(normal_format)
+                                parts.append(num)
+
+                            last_idx = end
+
+                        if last_idx < len(cell_value):
+                            parts.append(normal_format)
+                            parts.append(cell_value[last_idx:])
+
+                        try:
+                            worksheet.write_rich_string(row_idx, 0, *parts)
+                        except:
+                            worksheet.write(row_idx, 0, cell_value)
+
+                    worksheet.set_column(0, 0, col_width + 3)
+                    workbook.close()
+
+                    zip_path = os.path.join(tmp_dir, "TPN_COMPLETE.zip")
+
+                    with zipfile.ZipFile(zip_path, "w") as z:
+                        z.write(save_path, "TPN_KET_QUA.xlsx")
+                        z.write(kehoach_path, "TPN_KE_HOACH_XE.xlsx")
+
+                    with open(zip_path, "rb") as f:
+                        zip_data = f.read()
+
+                st.success(f"✅ COMPLETE !!! Matched: {count}")
+
+                st.session_state["done"] = True
+                st.session_state["processing"] = False
+
+                st.download_button(
+                    "📥 Download ALL (ZIP)",
+                    data=zip_data,
+                    file_name="THL TO SM.zip"
+                )
+
+                st.session_state["uploader_key"] += 1
+
+            except Exception:
+                st.session_state["processing"] = False
+                st.error("❌ Có lỗi xảy ra! File không hợp lệ!")
+
+    st.markdown('</div>', unsafe_allow_html=True)
