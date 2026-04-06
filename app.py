@@ -4,7 +4,6 @@ import re
 import tempfile
 import os
 import zipfile
-import uuid
 import xlsxwriter
 
 from openpyxl import load_workbook
@@ -22,28 +21,13 @@ header {display: none !important;}
 #MainMenu {visibility: hidden;}
 footer {visibility: hidden;}
 
-.block-container {
-    padding-top: 0rem !important;
-}
+.block-container {padding-top: 0rem !important;}
 
-html, body {
-    background-color: #f1f5f9;
-}
+html, body {background-color: #f1f5f9;}
 
-.header {
-    text-align: center;
-    padding: 10px 0;
-}
-
-.header h1 {
-    color: #0284c7;
-    margin: 0;
-}
-
-.header p {
-    color: #64748b;
-    margin: 0;
-}
+.header {text-align: center; padding: 10px 0;}
+.header h1 {color: #0284c7; margin: 0;}
+.header p {color: #64748b; margin: 0;}
 
 .card {
     background: white;
@@ -93,16 +77,20 @@ st.markdown("""
 """, unsafe_allow_html=True)
 
 # =========================
-# SAFE LOAD (FIX STYLE ERROR)
+# SAFE LOAD (ANTI CRASH)
 # =========================
 def safe_load(path, read_only=False):
     try:
         return load_workbook(path, read_only=read_only, data_only=True)
     except Exception:
-        # fallback: đọc bằng pandas rồi save lại
-        df = pd.read_excel(path, engine="openpyxl")
+        try:
+            df = pd.read_excel(path, engine=None)
+        except Exception:
+            df = pd.read_excel(path)
+
         fixed_path = path.replace(".xlsx", "_clean.xlsx")
         df.to_excel(fixed_path, index=False)
+
         return load_workbook(fixed_path, read_only=read_only, data_only=True)
 
 # =========================
@@ -181,6 +169,7 @@ with st.container():
 
             for i in range(2, ws.max_row + 1):
                 val = ws.cell(i, col_index).value
+
                 if val:
                     nums = set()
                     for num in re.findall(r"\d+", str(val)):
@@ -198,7 +187,7 @@ with st.container():
             wb.save(save_path)
             wb.close()
 
-            # ===== FILE 2 (HIGHLIGHT + AUTO WIDTH) =====
+            # ===== FILE 2 =====
             df2 = pd.read_excel(path_book1, header=None)
 
             workbook = xlsxwriter.Workbook(kehoach_path)
@@ -246,6 +235,7 @@ with st.container():
 
             # ===== ZIP =====
             zip_path = os.path.join(tmp_dir, "TPN_COMPLETE.zip")
+
             with zipfile.ZipFile(zip_path, "w") as z:
                 z.write(save_path, "TPN_KET_QUA.xlsx")
                 z.write(kehoach_path, "TPN_KE_HOACH_XE.xlsx")
