@@ -4,12 +4,11 @@ import re
 import tempfile
 import os
 import zipfile
-import shutil
 import uuid
 import xlsxwriter
 
 from openpyxl import load_workbook
-from openpyxl.styles import PatternFill, Font, Alignment
+from openpyxl.styles import PatternFill
 from openpyxl.worksheet.views import Selection
 
 st.set_page_config(page_title="TPN TOOL ⚡", layout="centered")
@@ -84,7 +83,7 @@ if "uploader_key" not in st.session_state:
     st.session_state["uploader_key"] = 0
 
 # =========================
-# HEADER UI
+# HEADER
 # =========================
 st.markdown("""
 <div class="header">
@@ -94,30 +93,21 @@ st.markdown("""
 """, unsafe_allow_html=True)
 
 # =========================
-# FUNCTIONS
+# SAFE LOAD (FIX STYLE ERROR)
 # =========================
-def fix_excel_styles(path):
-    tmp_dir = os.path.join(tempfile.gettempdir(), f"fix_{uuid.uuid4().hex}")
-    os.makedirs(tmp_dir, exist_ok=True)
-
-    with zipfile.ZipFile(path, 'r') as zin:
-        zin.extractall(tmp_dir)
-
-    style_path = os.path.join(tmp_dir, "xl", "styles.xml")
-    if os.path.exists(style_path):
-        os.remove(style_path)
-
-    shutil.make_archive(path.replace(".xlsx", ""), 'zip', tmp_dir)
-    os.rename(path.replace(".xlsx", ".zip"), path.replace(".xlsx", "_fixed.xlsx"))
-
-    return path.replace(".xlsx", "_fixed.xlsx")
-
 def safe_load(path, read_only=False):
     try:
         return load_workbook(path, read_only=read_only, data_only=True)
-    except:
-        return load_workbook(fix_excel_styles(path), read_only=read_only, data_only=True)
+    except Exception:
+        # fallback: đọc bằng pandas rồi save lại
+        df = pd.read_excel(path, engine="openpyxl")
+        fixed_path = path.replace(".xlsx", "_clean.xlsx")
+        df.to_excel(fixed_path, index=False)
+        return load_workbook(fixed_path, read_only=read_only, data_only=True)
 
+# =========================
+# FIND COLUMN
+# =========================
 def find_shipment_col(ws):
     for cell in ws[1]:
         if cell.value and "Shipment Nbr" in str(cell.value):
@@ -179,6 +169,10 @@ with st.container():
             # ===== FILE 1 =====
             wb = safe_load(path_tpn)
             ws = wb.active
+
+            ws.sheet_view.topLeftCell = "A1"
+            ws.sheet_view.selection = [Selection(activeCell="A1", sqref="A1")]
+
             col_index = find_shipment_col(ws)
 
             yellow = PatternFill("solid", fgColor="FFFF00")
@@ -204,7 +198,7 @@ with st.container():
             wb.save(save_path)
             wb.close()
 
-            # ===== FILE 2 (highlight + auto width) =====
+            # ===== FILE 2 (HIGHLIGHT + AUTO WIDTH) =====
             df2 = pd.read_excel(path_book1, header=None)
 
             workbook = xlsxwriter.Workbook(kehoach_path)
@@ -250,7 +244,7 @@ with st.container():
 
             workbook.close()
 
-            # ZIP
+            # ===== ZIP =====
             zip_path = os.path.join(tmp_dir, "TPN_COMPLETE.zip")
             with zipfile.ZipFile(zip_path, "w") as z:
                 z.write(save_path, "TPN_KET_QUA.xlsx")
