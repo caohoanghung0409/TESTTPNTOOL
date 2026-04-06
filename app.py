@@ -10,6 +10,7 @@ import xlsxwriter
 
 from openpyxl import load_workbook
 from openpyxl.styles import PatternFill, Font
+from openpyxl.worksheet.views import Selection
 
 st.set_page_config(page_title="TPN TOOL ⚡", layout="centered")
 
@@ -69,7 +70,7 @@ if "last_file_hash" not in st.session_state:
 
 
 # =========================
-# FIX EXCEL STRUCTURE
+# FIX EXCEL
 # =========================
 def fix_excel_styles(path):
     tmp_dir = os.path.join(tempfile.gettempdir(), f"fix_{uuid.uuid4().hex}")
@@ -104,7 +105,7 @@ def fix_excel_styles(path):
 
 
 # =========================
-# SAFE LOAD (ĐÃ FIX LỖI FILE)
+# SAFE LOAD
 # =========================
 def safe_load(path, read_only=False):
     try:
@@ -134,7 +135,7 @@ def find_shipment_col(ws):
 
 
 # =========================
-# HEADER
+# UI
 # =========================
 st.markdown("""
 <div class="header">
@@ -153,7 +154,6 @@ with st.container():
         key=f"uploader_{st.session_state['uploader_key']}"
     )
 
-    # reset state khi đổi file
     current_hash = None
     if uploaded_files:
         current_hash = "|".join(sorted([f.name for f in uploaded_files]))
@@ -166,9 +166,6 @@ with st.container():
     ready = uploaded_files and len(uploaded_files) == 2
     can_run = ready and (not st.session_state["processing"]) and (not st.session_state["done"])
 
-    # =========================
-    # BUTTON
-    # =========================
     if st.button("🚀 Bắt đầu xử lý", disabled=not can_run):
 
         st.session_state["processing"] = True
@@ -181,24 +178,19 @@ with st.container():
                 path_tpn = None
                 path_book1 = None
 
-                # =========================
-                # CHECK FILE VALIDATION (FIX ERROR HERE)
-                # =========================
                 for file in uploaded_files:
                     path = os.path.join(tmp_dir, file.name)
 
                     with open(path, "wb") as f:
                         f.write(file.read())
 
-                    # 👉 CHẶN FILE SAI NGAY ĐÂY
                     try:
                         wb_check = safe_load(path, read_only=True)
                         ws_check = wb_check.active
                         header = [str(c.value).strip() if c.value else "" for c in ws_check[1]]
                         wb_check.close()
-
                     except ValueError:
-                        st.error(f"❌ File '{file.name}' không đúng định dạng Excel hợp lệ!")
+                        st.error(f"❌ File '{file.name}' không hợp lệ!")
                         st.session_state["processing"] = False
                         st.stop()
 
@@ -208,13 +200,10 @@ with st.container():
                         path_book1 = path
 
                 if not path_tpn or not path_book1:
-                    st.error("❌ Không xác định được đúng 2 loại file!")
+                    st.error("❌ Không đúng định dạng 2 file!")
                     st.session_state["processing"] = False
                     st.stop()
 
-                # =========================
-                # OUTPUT PATH
-                # =========================
                 save_path = os.path.join(tmp_dir, "TPN_KET_QUA.xlsx")
                 kehoach_path = os.path.join(tmp_dir, "TPN_KE_HOACH_XE.xlsx")
 
@@ -268,12 +257,13 @@ with st.container():
                             ws.cell(i, col_index).fill = yellow
                             count += 1
 
+                # 🔥 FIX: KHÔNG NHẢY VỀ A1
+                ws.sheet_view.selection = [Selection(activeCell="A2", sqref="A2")]
+
                 wb.save(save_path)
                 wb.close()
 
-                # =========================
-                # EXPORT EXCEL 2
-                # =========================
+                # ===== FILE 2 GIỮ NGUYÊN =====
                 df2 = pd.read_excel(path_book1, header=None, engine="openpyxl", dtype=str)
 
                 workbook = xlsxwriter.Workbook(kehoach_path)
@@ -286,7 +276,6 @@ with st.container():
 
                 for row_idx, row in df2.iterrows():
                     cell_value = "" if pd.isna(row.iloc[0]) else str(row.iloc[0])
-
                     col_width = max(col_width, len(cell_value))
 
                     parts = []
@@ -323,9 +312,6 @@ with st.container():
                 worksheet.set_column(0, 0, col_width + 3)
                 workbook.close()
 
-                # =========================
-                # ZIP OUTPUT
-                # =========================
                 zip_path = os.path.join(tmp_dir, "TPN_COMPLETE.zip")
 
                 with zipfile.ZipFile(zip_path, "w") as z:
@@ -350,4 +336,4 @@ with st.container():
 
         except Exception:
             st.session_state["processing"] = False
-            st.error("❌ Có lỗi xảy ra! File không đúng định dạng hoặc bị hỏng.")
+            st.error("❌ Có lỗi xảy ra! File không hợp lệ.")
