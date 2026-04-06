@@ -257,8 +257,9 @@ with st.container():
                             ws.cell(i, col_index).fill = yellow
                             count += 1
 
-                # 🔥 FIX: KHÔNG NHẢY VỀ A1
-                ws.sheet_view.selection = [Selection(activeCell="A2", sqref="A2")]
+                # ✅ FIX MỞ FILE Ở A1
+                ws.sheet_view.selection = [Selection(activeCell="A1", sqref="A1")]
+                ws.sheet_view.topLeftCell = "A1"
 
                 wb.save(save_path)
                 wb.close()
