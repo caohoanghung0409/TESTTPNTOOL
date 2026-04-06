@@ -9,9 +9,7 @@ import uuid
 import xlsxwriter
 
 from openpyxl import load_workbook
-from openpyxl.styles import PatternFill, Font, Alignment
-from openpyxl.utils import get_column_letter
-from openpyxl.worksheet.views import Selection
+from openpyxl.styles import PatternFill, Font
 
 st.set_page_config(page_title="TPN TOOL ⚡", layout="centered")
 
@@ -142,14 +140,12 @@ with st.container():
         key=f"uploader_{st.session_state['uploader_key']}"
     )
 
-    # reset khi upload mới
-    if uploaded_files:
-        if len(uploaded_files) != 2:
-            st.session_state["done"] = False
+    # reset trạng thái khi upload sai
+    if uploaded_files and len(uploaded_files) != 2:
+        st.session_state["done"] = False
 
     ready = uploaded_files and len(uploaded_files) == 2
 
-    # ⭐ FIX QUAN TRỌNG: chỉ phụ thuộc done + processing + ready
     can_run = ready and (not st.session_state["processing"]) and (not st.session_state["done"])
 
     # =========================
@@ -304,7 +300,7 @@ with st.container():
 
             st.success(f"✅ COMPLETE !!! Matched: {count}")
 
-            st.session_state["done"] = True  # ⭐ QUAN TRỌNG
+            st.session_state["done"] = True
             st.session_state["processing"] = False
 
             st.download_button(
@@ -312,6 +308,9 @@ with st.container():
                 data=zip_data,
                 file_name="TPN_COMPLETE.zip"
             )
+
+            # ⭐ RESET FILE UPLOADER SAU DOWNLOAD (FIX CHÍNH)
+            st.session_state["uploader_key"] += 1
 
         except:
             st.session_state["processing"] = False
