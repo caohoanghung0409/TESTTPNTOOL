@@ -291,9 +291,9 @@ with st.container():
             wb.close()
 
             # =========================
-            # PROCESS FILE 2 (CHỈ TÔ SỐ TRÙNG)
+            # PROCESS FILE 2 (FIX KEYERROR + TÔ ĐÚNG SỐ)
             # =========================
-            df2 = pd.read_excel(path_book1, engine="openpyxl")
+            df2 = pd.read_excel(path_book1, header=None, engine="openpyxl")
 
             workbook = xlsxwriter.Workbook(kehoach_path)
             worksheet = workbook.add_worksheet()
@@ -302,7 +302,7 @@ with st.container():
             normal_format = workbook.add_format({'bold': True})
 
             for row_idx, row in df2.iterrows():
-                cell_value = str(row[0]) if pd.notna(row[0]) else ""
+                cell_value = str(row.iloc[0]) if pd.notna(row.iloc[0]) else ""
 
                 parts = []
                 last_idx = 0
