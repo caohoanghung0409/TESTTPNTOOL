@@ -43,6 +43,8 @@ html, body {background-color: #f1f5f9;}
 .stButton>button:disabled {
     background: #94a3b8 !important;
     color: #e2e8f0 !important;
+    opacity: 0.6;
+    cursor: not-allowed;
 }
 
 .stDownloadButton>button {
@@ -140,20 +142,23 @@ with st.container():
         key=f"uploader_{st.session_state['uploader_key']}"
     )
 
-    # reset state khi upload mới
+    # reset khi upload mới
     if uploaded_files:
         if len(uploaded_files) != 2:
             st.session_state["done"] = False
-        elif len(uploaded_files) == 2 and st.session_state["done"]:
-            # nếu upload lại sau khi done
-            st.session_state["done"] = False
 
     ready = uploaded_files and len(uploaded_files) == 2
+
+    # ⭐ FIX QUAN TRỌNG: chỉ phụ thuộc done + processing + ready
     can_run = ready and (not st.session_state["processing"]) and (not st.session_state["done"])
 
+    # =========================
+    # BUTTON
+    # =========================
     if st.button("🚀 Bắt đầu xử lý", disabled=not can_run):
 
         st.session_state["processing"] = True
+        st.session_state["done"] = False
 
         try:
             with st.spinner("⏳ Đang xử lý..."):
@@ -201,7 +206,6 @@ with st.container():
                 col_index = find_shipment_col(ws)
 
                 yellow = PatternFill("solid", fgColor="FFFF00")
-
                 header_fill = PatternFill("solid", fgColor="000080")
                 header_font = Font(color="FFFFFF", bold=True)
 
@@ -251,7 +255,6 @@ with st.container():
                 col_width = 0
 
                 for row_idx, row in df2.iterrows():
-
                     cell_value = "" if pd.isna(row.iloc[0]) else str(row.iloc[0])
 
                     col_width = max(col_width, len(cell_value))
@@ -300,7 +303,9 @@ with st.container():
                     zip_data = f.read()
 
             st.success(f"✅ COMPLETE !!! Matched: {count}")
-            st.session_state["done"] = True
+
+            st.session_state["done"] = True  # ⭐ QUAN TRỌNG
+            st.session_state["processing"] = False
 
             st.download_button(
                 "📥 Download ALL (ZIP)",
@@ -308,7 +313,8 @@ with st.container():
                 file_name="TPN_COMPLETE.zip"
             )
 
-        finally:
+        except:
             st.session_state["processing"] = False
+            raise
 
     st.markdown('</div>', unsafe_allow_html=True)
