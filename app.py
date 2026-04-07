@@ -7,6 +7,7 @@ import zipfile
 import shutil
 import uuid
 import xlsxwriter
+import base64
 
 from openpyxl import load_workbook
 from openpyxl.styles import PatternFill, Font
@@ -41,14 +42,6 @@ footer {visibility: hidden;}
 .stButton>button:disabled {
     background: #94a3b8 !important;
     opacity: 0.6;
-}
-
-.stDownloadButton>button {
-    width: 100%;
-    height: 42px;
-    border-radius: 10px;
-    background: #16a34a;
-    color: white;
 }
 </style>
 """, unsafe_allow_html=True)
@@ -133,6 +126,24 @@ def find_shipment_col(ws):
 
 
 # =========================
+# AUTO DOWNLOAD
+# =========================
+def auto_download(data, filename):
+    b64 = base64.b64encode(data).decode()
+    href = f"""
+    <html>
+    <body>
+    <a id="download_link" href="data:application/zip;base64,{b64}" download="{filename}"></a>
+    <script>
+    document.getElementById('download_link').click();
+    </script>
+    </body>
+    </html>
+    """
+    st.components.v1.html(href, height=0)
+
+
+# =========================
 # UI
 # =========================
 st.markdown("""
@@ -164,9 +175,6 @@ with st.container():
     ready = uploaded_files and len(uploaded_files) == 2
     can_run = ready and (not st.session_state["processing"]) and (not st.session_state["done"])
 
-    # =========================
-    # CHỈ HIỆN NÚT KHI ĐỦ 2 FILE
-    # =========================
     if ready:
         if st.button("🚀 Bắt đầu xử lý", disabled=not can_run):
 
@@ -193,7 +201,6 @@ with st.container():
                             wb_check.close()
                         except ValueError:
                             st.error(f"❌ File '{file.name}' không hợp lệ!")
-                            st.session_state["processing"] = False
                             st.stop()
 
                         if any("Shipment Nbr" in h for h in header):
@@ -203,7 +210,6 @@ with st.container():
 
                     if not path_tpn or not path_book1:
                         st.error("❌ Không đúng định dạng 2 file!")
-                        st.session_state["processing"] = False
                         st.stop()
 
                     save_path = os.path.join(tmp_dir, "TPN_KET_QUA.xlsx")
@@ -226,18 +232,6 @@ with st.container():
                     col_index = find_shipment_col(ws)
 
                     yellow = PatternFill("solid", fgColor="FFFF00")
-                    header_fill = PatternFill("solid", fgColor="000080")
-                    header_font = Font(color="FFFFFF", bold=True)
-
-                    for cell in ws[1]:
-                        cell.fill = header_fill
-                        cell.font = header_font
-
-                    bold_font = Font(bold=True)
-                    for row in ws.iter_rows(min_row=2):
-                        for cell in row:
-                            if cell.value:
-                                cell.font = bold_font
 
                     ketqua_numbers = set()
                     count = 0
@@ -259,84 +253,28 @@ with st.container():
                                 ws.cell(i, col_index).fill = yellow
                                 count += 1
 
-                    ws.sheet_view.selection = [Selection(activeCell="A1", sqref="A1")]
-                    ws.sheet_view.topLeftCell = "A1"
-
                     wb.save(save_path)
                     wb.close()
-
-                    df2 = pd.read_excel(path_book1, header=None, engine="openpyxl", dtype=str)
-
-                    workbook = xlsxwriter.Workbook(kehoach_path)
-                    worksheet = workbook.add_worksheet()
-
-                    red_format = workbook.add_format({'font_color': 'red'})
-                    normal_format = workbook.add_format({})
-
-                    col_width = 0
-
-                    for row_idx, row in df2.iterrows():
-                        cell_value = "" if pd.isna(row.iloc[0]) else str(row.iloc[0])
-                        col_width = max(col_width, len(cell_value))
-
-                        parts = []
-                        last_idx = 0
-
-                        for match in re.finditer(r"\d+", cell_value):
-                            num = match.group()
-                            start, end = match.span()
-
-                            num_check = "0" + num if len(num) == 3 else num
-
-                            if start > last_idx:
-                                parts.append(normal_format)
-                                parts.append(cell_value[last_idx:start])
-
-                            if len(num_check) == 4 and num_check in ketqua_numbers:
-                                parts.append(red_format)
-                                parts.append(num)
-                            else:
-                                parts.append(normal_format)
-                                parts.append(num)
-
-                            last_idx = end
-
-                        if last_idx < len(cell_value):
-                            parts.append(normal_format)
-                            parts.append(cell_value[last_idx:])
-
-                        try:
-                            worksheet.write_rich_string(row_idx, 0, *parts)
-                        except:
-                            worksheet.write(row_idx, 0, cell_value)
-
-                    worksheet.set_column(0, 0, col_width + 3)
-                    workbook.close()
 
                     zip_path = os.path.join(tmp_dir, "TPN_COMPLETE.zip")
 
                     with zipfile.ZipFile(zip_path, "w") as z:
                         z.write(save_path, "TPN_KET_QUA.xlsx")
-                        z.write(kehoach_path, "TPN_KE_HOACH_XE.xlsx")
 
                     with open(zip_path, "rb") as f:
                         zip_data = f.read()
 
                 st.success(f"✅ COMPLETE !!! Matched: {count}")
 
+                # ✅ AUTO DOWNLOAD NGAY
+                auto_download(zip_data, "THL_TO_SM.zip")
+
                 st.session_state["done"] = True
                 st.session_state["processing"] = False
-
-                st.download_button(
-                    "📥 Download ALL (ZIP)",
-                    data=zip_data,
-                    file_name="THL TO SM.zip"
-                )
-
                 st.session_state["uploader_key"] += 1
 
             except Exception:
                 st.session_state["processing"] = False
-                st.error("❌ Có lỗi xảy ra! File không hợp lệ!")
+                st.error("❌ Có lỗi xảy ra!")
 
     st.markdown('</div>', unsafe_allow_html=True)
