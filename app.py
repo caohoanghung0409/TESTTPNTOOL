@@ -10,7 +10,7 @@ import xlsxwriter
 import base64
 
 from openpyxl import load_workbook
-from openpyxl.styles import PatternFill, Font
+from openpyxl.styles import PatternFill
 from openpyxl.worksheet.views import Selection
 
 st.set_page_config(page_title="THL TO SM", layout="centered")
@@ -37,11 +37,6 @@ footer {visibility: hidden;}
     border-radius: 10px;
     background: linear-gradient(90deg, #0ea5e9, #22c55e);
     color: white;
-}
-
-.stButton>button:disabled {
-    background: #94a3b8 !important;
-    opacity: 0.6;
 }
 </style>
 """, unsafe_allow_html=True)
@@ -93,7 +88,7 @@ def find_shipment_col(ws):
 
 
 # =========================
-# UI
+# UI HEADER
 # =========================
 st.markdown("""
 <div class="header">
@@ -124,6 +119,9 @@ with st.container():
     ready = uploaded_files and len(uploaded_files) == 2
     can_run = ready and (not st.session_state["processing"]) and (not st.session_state["done"])
 
+    # =========================
+    # BUTTON RUN
+    # =========================
     if ready:
         if st.button("🚀 Bắt đầu xử lý", disabled=not can_run):
 
@@ -160,6 +158,9 @@ with st.container():
                     save_path = os.path.join(tmp_dir, "TPN_KET_QUA.xlsx")
                     kehoach_path = os.path.join(tmp_dir, "TPN_KE_HOACH_XE.xlsx")
 
+                    # =========================
+                    # READ DATA
+                    # =========================
                     df = pd.read_excel(path_book1, usecols=[0], engine="openpyxl", dtype=str)
 
                     all_numbers = set()
@@ -206,7 +207,7 @@ with st.container():
                     wb.close()
 
                     # =========================
-                    # FILE 2 (KHÔNG LỖI + AUTO WIDTH)
+                    # FILE 2
                     # =========================
                     df2 = pd.read_excel(path_book1, header=None, engine="openpyxl", dtype=str)
 
@@ -272,10 +273,21 @@ with st.container():
 
                 st.session_state["done"] = True
                 st.session_state["processing"] = False
-                st.session_state["uploader_key"] += 1
 
             except Exception:
                 st.session_state["processing"] = False
                 st.error("❌ Có lỗi xảy ra!")
+
+    # =========================
+    # BUTTON RESET (NEW)
+    # =========================
+    if st.session_state["done"]:
+        st.markdown("<br>", unsafe_allow_html=True)
+
+        if st.button("🔄 Xử lý file mới", use_container_width=True):
+            st.session_state["uploader_key"] += 1
+            st.session_state["done"] = False
+            st.session_state["processing"] = False
+            st.rerun()
 
     st.markdown('</div>', unsafe_allow_html=True)
