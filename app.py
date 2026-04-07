@@ -42,17 +42,16 @@ footer {visibility: hidden;}
 # =========================
 # STATE
 # =========================
-if "uploader_key" not in st.session_state:
-    st.session_state["uploader_key"] = 0
-
-if "processing" not in st.session_state:
-    st.session_state["processing"] = False
-
-if "done" not in st.session_state:
-    st.session_state["done"] = False
-
-if "last_file_hash" not in st.session_state:
-    st.session_state["last_file_hash"] = None
+for key, val in {
+    "uploader_key": 0,
+    "processing": False,
+    "done": False,
+    "last_file_hash": None,
+    "zip_data": None,
+    "match_count": 0
+}.items():
+    if key not in st.session_state:
+        st.session_state[key] = val
 
 
 # =========================
@@ -86,7 +85,7 @@ def find_shipment_col(ws):
 
 
 # =========================
-# UI HEADER
+# HEADER
 # =========================
 st.markdown("""
 <div class="header">
@@ -105,34 +104,42 @@ with st.container():
         key=f"uploader_{st.session_state['uploader_key']}"
     )
 
-    # HASH FILE
+    # RESET khi đổi file
     current_hash = None
     if uploaded_files:
         current_hash = "|".join(sorted([f.name for f in uploaded_files]))
 
     if current_hash != st.session_state["last_file_hash"]:
-        st.session_state["done"] = False
-        st.session_state["processing"] = False
-        st.session_state["last_file_hash"] = current_hash
+        st.session_state.update({
+            "done": False,
+            "processing": False,
+            "zip_data": None,
+            "match_count": 0,
+            "last_file_hash": current_hash
+        })
 
     ready = uploaded_files and len(uploaded_files) == 2
     can_run = ready and (not st.session_state["processing"]) and (not st.session_state["done"])
 
     # =========================
-    # BUTTON ZONE (FIX CHUẨN)
+    # HIỂN THỊ KẾT QUẢ + DOWNLOAD
+    # =========================
+    if st.session_state["done"] and st.session_state["zip_data"]:
+        st.success(f"✅ COMPLETE !!! Matched: {st.session_state['match_count']}")
+        auto_download(st.session_state["zip_data"], "THL_TO_SM.zip")
+
+    # =========================
+    # BUTTON ZONE
     # =========================
     if st.session_state["done"]:
-        # 👉 CHỈ HIỆN RESET
-        st.markdown("<br>", unsafe_allow_html=True)
-
         if st.button("🔄 Xử lý file mới", use_container_width=True):
             st.session_state["uploader_key"] += 1
             st.session_state["done"] = False
             st.session_state["processing"] = False
+            st.session_state["zip_data"] = None
             st.rerun()
 
     else:
-        # 👉 CHỈ HIỆN RUN
         if ready:
             if st.button("🚀 Bắt đầu xử lý", disabled=not can_run):
 
@@ -182,7 +189,6 @@ with st.container():
                         ws = wb.active
 
                         col_index = find_shipment_col(ws)
-
                         yellow = PatternFill("solid", fgColor="FFFF00")
 
                         ketqua_numbers = set()
@@ -266,13 +272,11 @@ with st.container():
                         with open(zip_path, "rb") as f:
                             zip_data = f.read()
 
-                    st.success(f"✅ COMPLETE !!! Matched: {count}")
-
-                    auto_download(zip_data, "THL_TO_SM.zip")
-
+                    # 👉 LƯU STATE (QUAN TRỌNG)
+                    st.session_state["zip_data"] = zip_data
+                    st.session_state["match_count"] = count
                     st.session_state["done"] = True
                     st.session_state["processing"] = False
-                    st.rerun()
 
                 except Exception:
                     st.session_state["processing"] = False
