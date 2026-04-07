@@ -53,10 +53,6 @@ if "processing" not in st.session_state:
 if "done" not in st.session_state:
     st.session_state["done"] = False
 
-if "last_file_hash" not in st.session_state:
-    st.session_state["last_file_hash"] = None
-
-
 # =========================
 # AUTO DOWNLOAD
 # =========================
@@ -74,21 +70,15 @@ def auto_download(data, filename):
     """
     st.components.v1.html(href, height=0)
 
-
-# =========================
-# FIND COLUMN
 # =========================
 def find_shipment_col(ws):
     for cell in ws[1]:
-        if cell.value:
-            v = str(cell.value).replace("\xa0", " ").strip()
-            if "Shipment Nbr" in v:
-                return cell.column
+        if cell.value and "Shipment Nbr" in str(cell.value):
+            return cell.column
     return None
 
-
 # =========================
-# UI HEADER
+# HEADER
 # =========================
 st.markdown("""
 <div class="header">
@@ -97,6 +87,9 @@ st.markdown("""
 </div>
 """, unsafe_allow_html=True)
 
+# =========================
+# UI
+# =========================
 with st.container():
     st.markdown('<div class="card">', unsafe_allow_html=True)
 
@@ -107,58 +100,41 @@ with st.container():
         key=f"uploader_{st.session_state['uploader_key']}"
     )
 
-    current_hash = None
-    if uploaded_files:
-        current_hash = "|".join(sorted([f.name for f in uploaded_files]))
-
-    if current_hash != st.session_state["last_file_hash"]:
-        st.session_state["done"] = False
-        st.session_state["processing"] = False
-        st.session_state["last_file_hash"] = current_hash
-
     ready = uploaded_files and len(uploaded_files) == 2
-    can_run = ready and (not st.session_state["processing"]) and (not st.session_state["done"])
 
     # =========================
-    # BUTTON RUN (ẨN KHI DONE)
+    # NÚT CHẠY (ẨN KHI DONE)
     # =========================
     if ready and not st.session_state["done"]:
-        if st.button("🚀 Bắt đầu xử lý", disabled=not can_run):
+
+        if st.button("🚀 Bắt đầu xử lý"):
 
             st.session_state["processing"] = True
-            st.session_state["done"] = False
 
             try:
                 with st.spinner("⏳ Đang xử lý..."):
 
                     tmp_dir = tempfile.gettempdir()
-                    path_tpn = None
-                    path_book1 = None
+                    path_tpn, path_book1 = None, None
 
                     for file in uploaded_files:
                         path = os.path.join(tmp_dir, file.name)
-
                         with open(path, "wb") as f:
                             f.write(file.read())
 
-                        wb_check = load_workbook(path, read_only=True)
-                        ws_check = wb_check.active
-                        header = [str(c.value).strip() if c.value else "" for c in ws_check[1]]
-                        wb_check.close()
+                        wb = load_workbook(path, read_only=True)
+                        header = [str(c.value) if c.value else "" for c in wb.active[1]]
+                        wb.close()
 
                         if any("Shipment Nbr" in h for h in header):
                             path_tpn = path
                         else:
                             path_book1 = path
 
-                    if not path_tpn or not path_book1:
-                        st.error("❌ Không đúng định dạng 2 file!")
-                        st.stop()
-
                     save_path = os.path.join(tmp_dir, "TPN_KET_QUA.xlsx")
                     kehoach_path = os.path.join(tmp_dir, "TPN_KE_HOACH_XE.xlsx")
 
-                    df = pd.read_excel(path_book1, usecols=[0], engine="openpyxl", dtype=str)
+                    df = pd.read_excel(path_book1, usecols=[0], dtype=str)
 
                     all_numbers = set()
                     for v in df.iloc[:, 0].dropna():
@@ -170,7 +146,6 @@ with st.container():
 
                     wb = load_workbook(path_tpn)
                     ws = wb.active
-
                     col_index = find_shipment_col(ws)
 
                     yellow = PatternFill("solid", fgColor="FFFF00")
@@ -180,14 +155,9 @@ with st.container():
 
                     for i in range(2, ws.max_row + 1):
                         val = ws.cell(i, col_index).value
-
                         if val:
-                            nums = set()
-                            for num in re.findall(r"\d+", str(val)):
-                                if len(num) == 3:
-                                    num = "0" + num
-                                if len(num) == 4:
-                                    nums.add(num)
+                            nums = set(re.findall(r"\d+", str(val)))
+                            nums = {"0"+n if len(n)==3 else n for n in nums if len(n) in [3,4]}
 
                             ketqua_numbers.update(nums)
 
@@ -202,73 +172,73 @@ with st.container():
                     wb.close()
 
                     # FILE 2
-                    df2 = pd.read_excel(path_book1, header=None, engine="openpyxl", dtype=str)
+                    df2 = pd.read_excel(path_book1, header=None, dtype=str)
 
                     workbook = xlsxwriter.Workbook(kehoach_path)
                     worksheet = workbook.add_worksheet()
 
-                    red_format = workbook.add_format({'font_color': 'red'})
-                    normal_format = workbook.add_format({})
+                    red = workbook.add_format({'font_color': 'red'})
+                    normal = workbook.add_format({})
 
                     max_len = 0
 
-                    for row_idx, row in df2.iterrows():
-                        cell_value = "" if pd.isna(row.iloc[0]) else str(row.iloc[0])
-                        max_len = max(max_len, len(cell_value))
+                    for r, row in df2.iterrows():
+                        val = "" if pd.isna(row.iloc[0]) else str(row.iloc[0])
+                        max_len = max(max_len, len(val))
 
                         parts = []
-                        last_idx = 0
+                        last = 0
 
-                        for match in re.finditer(r"\d+", cell_value):
-                            num = match.group()
-                            start, end = match.span()
+                        for m in re.finditer(r"\d+", val):
+                            num = m.group()
+                            s, e = m.span()
 
-                            num_check = "0" + num if len(num) == 3 else num
+                            num_check = "0"+num if len(num)==3 else num
 
-                            if start > last_idx:
-                                parts += [normal_format, cell_value[last_idx:start]]
+                            if s > last:
+                                parts += [normal, val[last:s]]
 
-                            if len(num_check) == 4 and num_check in ketqua_numbers:
-                                parts += [red_format, num]
+                            if len(num_check)==4 and num_check in ketqua_numbers:
+                                parts += [red, num]
                             else:
-                                parts += [normal_format, num]
+                                parts += [normal, num]
 
-                            last_idx = end
+                            last = e
 
-                        if last_idx < len(cell_value):
-                            parts += [normal_format, cell_value[last_idx:]]
+                        if last < len(val):
+                            parts += [normal, val[last:]]
 
                         try:
-                            worksheet.write_rich_string(row_idx, 0, *parts)
+                            worksheet.write_rich_string(r, 0, *parts)
                         except:
-                            worksheet.write(row_idx, 0, cell_value)
+                            worksheet.write(r, 0, val)
 
                     worksheet.set_column(0, 0, max_len + 3)
                     workbook.close()
 
-                    # ZIP
                     zip_path = os.path.join(tmp_dir, "TPN_COMPLETE.zip")
-
                     with zipfile.ZipFile(zip_path, "w") as z:
                         z.write(save_path, "TPN_KET_QUA.xlsx")
                         z.write(kehoach_path, "TPN_KE_HOACH_XE.xlsx")
 
                     with open(zip_path, "rb") as f:
-                        zip_data = f.read()
+                        data = f.read()
 
                 st.success(f"✅ COMPLETE !!! Matched: {count}")
+                auto_download(data, "THL_TO_SM.zip")
 
-                auto_download(zip_data, "THL_TO_SM.zip")
-
+                # ⚠️ QUAN TRỌNG
                 st.session_state["done"] = True
                 st.session_state["processing"] = False
+
+                st.rerun()  # 👉 BẮT BUỘC để ẩn nút ngay
 
             except Exception:
                 st.session_state["processing"] = False
                 st.error("❌ Có lỗi xảy ra!")
 
     # =========================
-    # BUTTON RESET
+    # NÚT RESET
     # =========================
     if st.session_state["done"]:
         st.markdown("<br>", unsafe_allow_html=True)
