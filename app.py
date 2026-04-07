@@ -122,7 +122,8 @@ with st.container():
     # =========================
     # BUTTON RUN (ẨN KHI DONE)
     # =========================
-    if ready and not st.session_state["done"]:
+    if ready and (not st.session_state["done"]) and (not st.session_state["processing"]):
+
         if st.button("🚀 Bắt đầu xử lý", disabled=not can_run):
 
             st.session_state["processing"] = True
