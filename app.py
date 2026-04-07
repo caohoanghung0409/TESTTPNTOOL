@@ -120,9 +120,9 @@ with st.container():
     can_run = ready and (not st.session_state["processing"]) and (not st.session_state["done"])
 
     # =========================
-    # BUTTON RUN
+    # BUTTON RUN (ẨN KHI DONE)
     # =========================
-    if ready:
+    if ready and not st.session_state["done"]:
         if st.button("🚀 Bắt đầu xử lý", disabled=not can_run):
 
             st.session_state["processing"] = True
@@ -158,15 +158,11 @@ with st.container():
                     save_path = os.path.join(tmp_dir, "TPN_KET_QUA.xlsx")
                     kehoach_path = os.path.join(tmp_dir, "TPN_KE_HOACH_XE.xlsx")
 
-                    # =========================
-                    # READ DATA
-                    # =========================
                     df = pd.read_excel(path_book1, usecols=[0], engine="openpyxl", dtype=str)
 
                     all_numbers = set()
                     for v in df.iloc[:, 0].dropna():
-                        nums = re.findall(r"\d+", str(v))
-                        for num in nums:
+                        for num in re.findall(r"\d+", str(v)):
                             if len(num) == 3:
                                 num = "0" + num
                             if len(num) == 4:
@@ -199,16 +195,13 @@ with st.container():
                                 ws.cell(i, col_index).fill = yellow
                                 count += 1
 
-                    # FIX A1
                     ws.sheet_view.selection = [Selection(activeCell="A1", sqref="A1")]
                     ws.sheet_view.topLeftCell = "A1"
 
                     wb.save(save_path)
                     wb.close()
 
-                    # =========================
                     # FILE 2
-                    # =========================
                     df2 = pd.read_excel(path_book1, header=None, engine="openpyxl", dtype=str)
 
                     workbook = xlsxwriter.Workbook(kehoach_path)
@@ -250,14 +243,10 @@ with st.container():
                         except:
                             worksheet.write(row_idx, 0, cell_value)
 
-                    # AUTO WIDTH
                     worksheet.set_column(0, 0, max_len + 3)
-
                     workbook.close()
 
-                    # =========================
                     # ZIP
-                    # =========================
                     zip_path = os.path.join(tmp_dir, "TPN_COMPLETE.zip")
 
                     with zipfile.ZipFile(zip_path, "w") as z:
@@ -279,7 +268,7 @@ with st.container():
                 st.error("❌ Có lỗi xảy ra!")
 
     # =========================
-    # BUTTON RESET (NEW)
+    # BUTTON RESET
     # =========================
     if st.session_state["done"]:
         st.markdown("<br>", unsafe_allow_html=True)
