@@ -16,7 +16,7 @@ from openpyxl.worksheet.views import Selection
 st.set_page_config(page_title="THL TO SM", layout="centered")
 
 # =========================
-# CSS (GIỮ NGUYÊN UI)
+# UI (GIỮ NGUYÊN)
 # =========================
 st.markdown("""
 <style>
@@ -58,7 +58,19 @@ if "done" not in st.session_state:
 
 
 # =========================
-# FIX EXCEL
+# NORMALIZE (FIX QUAN TRỌNG NHẤT)
+# =========================
+def normalize(num):
+    num = re.sub(r"\D", "", str(num))  # chỉ lấy số
+    if len(num) > 4:
+        return None
+    if len(num) < 4:
+        num = num.zfill(4)
+    return num
+
+
+# =========================
+# EXCEL FIX (GIỮ NGUYÊN)
 # =========================
 def fix_excel_styles(path):
     tmp_dir = os.path.join(tempfile.gettempdir(), f"fix_{uuid.uuid4().hex}")
@@ -100,15 +112,13 @@ def safe_load(path, read_only=False):
 
 def find_shipment_col(ws):
     for cell in ws[1]:
-        if cell.value:
-            v = str(cell.value).replace("\xa0", " ").strip()
-            if "Shipment Nbr" in v:
-                return cell.column
+        if cell.value and "Shipment Nbr" in str(cell.value):
+            return cell.column
     return None
 
 
 # =========================
-# HEADER UI (KHÔI PHỤC LẠI)
+# UI HEADER
 # =========================
 st.markdown("""
 <div class="header">
@@ -161,19 +171,20 @@ with st.container():
                     kehoach_path = os.path.join(tmp_dir, "TPN_KE_HOACH_XE.xlsx")
 
                     # =========================
-                    # STEP 1: VALID FROM KET_QUA
+                    # STEP 1: VALID NUMBERS (BOOK1)
                     # =========================
                     df = pd.read_excel(path_book1, usecols=[0], dtype=str)
 
                     valid_numbers = set()
+
                     for v in df.iloc[:, 0].dropna():
                         for num in re.findall(r"\d+", str(v)):
-                            num = "0" + num if len(num) == 3 else num
-                            if len(num) == 4:
-                                valid_numbers.add(num)
+                            n = normalize(num)
+                            if n:
+                                valid_numbers.add(n)
 
                     # =========================
-                    # STEP 2: BUILD COLOR MAP (CHỈ VALID)
+                    # STEP 2: BUILD COLOR MAP (CHỈ VALID MATCH)
                     # =========================
                     df2 = pd.read_excel(path_book1, header=None, dtype=str)
 
@@ -190,12 +201,15 @@ with st.container():
                         text = "" if pd.isna(row.iloc[0]) else str(row.iloc[0])
 
                         nums = set()
-                        for num in re.findall(r"\d+", text):
-                            num = "0" + num if len(num) == 3 else num
-                            if num in valid_numbers:
-                                nums.add(num)
 
-                        # ❗ CHỈ TẠO GROUP NẾU CÓ MATCH THẬT
+                        for num in re.findall(r"\d+", text):
+                            n = normalize(num)
+
+                            # ❗ CHỈ NHẬN nếu nằm trong VALID
+                            if n and n in valid_numbers:
+                                nums.add(n)
+
+                        # ❗ QUAN TRỌNG: không có match => bỏ qua hoàn toàn
                         if not nums:
                             continue
 
@@ -234,10 +248,11 @@ with st.container():
                             continue
 
                         nums = set()
+
                         for num in re.findall(r"\d+", str(val)):
-                            num = "0" + num if len(num) == 3 else num
-                            if num in valid_numbers:
-                                nums.add(num)
+                            n = normalize(num)
+                            if n and n in valid_numbers:
+                                nums.add(n)
 
                         if not nums:
                             continue
@@ -262,7 +277,7 @@ with st.container():
                     wb.close()
 
                     # =========================
-                    # STEP 4: KẾ HOẠCH (GIỮ NGUYÊN)
+                    # STEP 4: KE HOACH (KHÔNG ĐỘNG LOGIC)
                     # =========================
                     workbook = xlsxwriter.Workbook(kehoach_path)
                     worksheet = workbook.add_worksheet()
@@ -282,12 +297,12 @@ with st.container():
                         for m in re.finditer(r"\d+", text):
                             num = m.group()
                             start, end = m.span()
-                            check = "0"+num if len(num) == 3 else num
+                            n = normalize(num)
 
                             if start > last:
                                 parts += [normal, text[last:start]]
 
-                            parts += [red if check in valid_numbers else normal, num]
+                            parts += [red if n in valid_numbers else normal, num]
                             last = end
 
                         if last < len(text):
