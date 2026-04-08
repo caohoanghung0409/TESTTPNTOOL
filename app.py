@@ -38,11 +38,6 @@ footer {visibility: hidden;}
     background: linear-gradient(90deg, #0ea5e9, #22c55e);
     color: white;
 }
-
-.stButton>button:disabled {
-    background: #94a3b8 !important;
-    opacity: 0.6;
-}
 </style>
 """, unsafe_allow_html=True)
 
@@ -52,32 +47,19 @@ footer {visibility: hidden;}
 if "uploader_key" not in st.session_state:
     st.session_state["uploader_key"] = 0
 
-if "processing" not in st.session_state:
-    st.session_state["processing"] = False
-
 if "done" not in st.session_state:
     st.session_state["done"] = False
 
 # =========================
-# COLOR PALETTE (TƯƠNG PHẢN MẠNH)
+# COLOR PALETTE (tương phản mạnh)
 # =========================
 COLOR_PALETTE = [
-    "FF3B30",  # đỏ
-    "34C759",  # xanh lá
-    "007AFF",  # xanh dương
-    "FF9500",  # cam
-    "AF52DE",  # tím
-    "FF2D55",  # hồng đậm
-    "5856D6",  # xanh tím
-    "00C7BE",  # xanh ngọc
-    "FFCC00",  # vàng đậm
-    "FF6B00",  # cam đậm
-    "4CD964",  # xanh lá nhạt đậm
-    "1E90FF",  # xanh biển
+    "FF3B30","34C759","007AFF","FF9500","AF52DE","FF2D55",
+    "5856D6","00C7BE","FFCC00","FF6B00","4CD964","1E90FF"
 ]
 
 # =========================
-# FIX EXCEL
+# FIX EXCEL (giữ an toàn openpyxl)
 # =========================
 def fix_excel_styles(path):
     tmp_dir = os.path.join(tempfile.gettempdir(), f"fix_{uuid.uuid4().hex}")
@@ -111,25 +93,22 @@ def fix_excel_styles(path):
     return fixed_path
 
 
-def safe_load(path, read_only=False):
+def safe_load(path):
     try:
-        return load_workbook(path, read_only=read_only, data_only=True, keep_links=False)
+        return load_workbook(path, data_only=True, keep_links=False)
     except:
         fixed = fix_excel_styles(path)
-        return load_workbook(fixed, read_only=read_only, data_only=True, keep_links=False)
+        return load_workbook(fixed, data_only=True, keep_links=False)
 
 
 def find_shipment_col(ws):
     for cell in ws[1]:
-        if cell.value:
-            v = str(cell.value).replace("\xa0", " ").strip()
-            if "Shipment Nbr" in v:
-                return cell.column
+        if cell.value and "Shipment Nbr" in str(cell.value):
+            return cell.column
     return None
 
-
 # =========================
-# UI
+# UI HEADER
 # =========================
 st.markdown("""
 <div class="header">
@@ -139,7 +118,6 @@ st.markdown("""
 """, unsafe_allow_html=True)
 
 with st.container():
-    st.markdown('<div class="card">', unsafe_allow_html=True)
 
     uploaded_files = st.file_uploader(
         "📂 Chọn 2 file Excel",
@@ -159,16 +137,19 @@ with st.container():
                     tmp_dir = tempfile.gettempdir()
                     path_tpn, path_book1 = None, None
 
+                    # =========================
+                    # phân loại file
+                    # =========================
                     for file in uploaded_files:
                         path = os.path.join(tmp_dir, file.name)
                         with open(path, "wb") as f:
                             f.write(file.read())
 
-                        wb = safe_load(path, True)
+                        wb = load_workbook(path, data_only=True)
                         header = [str(c.value) for c in wb.active[1]]
                         wb.close()
 
-                        if any("Shipment Nbr" in str(h) for h in header):
+                        if any("Shipment Nbr" in h for h in header):
                             path_tpn = path
                         else:
                             path_book1 = path
@@ -177,11 +158,11 @@ with st.container():
                     kehoach_path = os.path.join(tmp_dir, "TPN_KE_HOACH_XE.xlsx")
 
                     # =========================
-                    # LẤY SỐ TỪ BOOK1
+                    # lấy số từ BOOK1
                     # =========================
                     df = pd.read_excel(path_book1, usecols=[0], dtype=str)
-                    all_numbers = set()
 
+                    all_numbers = set()
                     for v in df.iloc[:, 0].dropna():
                         for num in re.findall(r"\d+", str(v)):
                             if len(num) == 3:
@@ -190,7 +171,7 @@ with st.container():
                                 all_numbers.add(num)
 
                     # =========================
-                    # LOAD TPN
+                    # load TPN
                     # =========================
                     wb = safe_load(path_tpn)
                     ws = wb.active
@@ -199,60 +180,55 @@ with st.container():
                     yellow = PatternFill("solid", fgColor="FFFF00")
                     header_fill = PatternFill("solid", fgColor="000080")
                     header_font = Font(color="FFFFFF", bold=True)
-                    bold_font = Font(bold=True)
 
-                    for cell in ws[1]:
-                        cell.fill = header_fill
-                        cell.font = header_font
-
-                    for row in ws.iter_rows(min_row=2):
-                        for cell in row:
-                            if cell.value:
-                                cell.font = bold_font
-
-                    ketqua_numbers = set()
+                    for c in ws[1]:
+                        c.fill = header_fill
+                        c.font = header_font
 
                     # =========================
-                    # MAP SỐ -> MÀU (QUAN TRỌNG)
+                    # MAP số -> màu
                     # =========================
-                    number_color_map = {}
-                    color_index = 0
+                    number_color = {}
+                    color_idx = 0
 
                     # =========================
-                    # TÔ MÀU TỪ TPN
+                    # xử lý KET_QUA
                     # =========================
                     for i in range(2, ws.max_row + 1):
                         val = ws.cell(i, col_index).value
-                        if val:
-                            nums = set()
+                        if not val:
+                            continue
 
-                            for num in re.findall(r"\d+", str(val)):
-                                if len(num) == 3:
-                                    num = "0" + num
-                                if len(num) == 4:
-                                    nums.add(num)
+                        nums = set()
+                        for num in re.findall(r"\d+", str(val)):
+                            if len(num) == 3:
+                                num = "0" + num
+                            if len(num) == 4:
+                                nums.add(num)
 
-                            ketqua_numbers.update(nums)
+                        match_nums = nums & all_numbers
 
-                            # gán màu cho từng số (KHÔNG trùng, tránh giống nhau)
-                            row_color = None
-                            for n in nums:
-                                if n in all_numbers:
-                                    if n not in number_color_map:
-                                        number_color_map[n] = COLOR_PALETTE[color_index % len(COLOR_PALETTE)]
-                                        color_index += 1
+                        if match_nums:
+                            # gán màu theo từng số
+                            for n in match_nums:
+                                if n not in number_color:
+                                    number_color[n] = COLOR_PALETTE[color_idx % len(COLOR_PALETTE)]
+                                    color_idx += 1
 
-                                    row_color = number_color_map[n]
+                            # CHỌN 1 MÀU ĐẠI DIỆN CHO DÒNG
+                            first_num = list(match_nums)[0]
+                            color = number_color[first_num]
 
-                            # tô dòng TPN_KET_QUA
-                            if nums & all_numbers:
-                                ws.cell(i, col_index).fill = yellow
+                            ws.cell(i, col_index).fill = PatternFill(
+                                "solid",
+                                fgColor=color
+                            )
 
                     wb.save(save_path)
                     wb.close()
 
                     # =========================
-                    # FILE KẾ HOẠCH (RICH TEXT)
+                    # FILE KEHOACH (GIỮ 1 MÀU ĐỎ)
                     # =========================
                     df2 = pd.read_excel(path_book1, header=None, dtype=str)
 
@@ -260,6 +236,7 @@ with st.container():
                     worksheet = workbook.add_worksheet()
 
                     normal = workbook.add_format({})
+                    red = workbook.add_format({'font_color': 'red'})
 
                     col_width = 0
 
@@ -273,15 +250,11 @@ with st.container():
                         for m in re.finditer(r"\d+", text):
                             num = m.group()
                             start, end = m.span()
-                            check = "0"+num if len(num)==3 else num
-
-                            color_hex = number_color_map.get(check, None)
-                            fmt = workbook.add_format({'font_color': color_hex}) if color_hex else normal
 
                             if start > last:
                                 parts += [normal, text[last:start]]
 
-                            parts += [fmt, num]
+                            parts += [red, num]
                             last = end
 
                         if last < len(text):
@@ -324,5 +297,3 @@ with st.container():
             st.session_state["uploader_key"] += 1
             st.session_state["done"] = False
             st.rerun()
-
-    st.markdown('</div>', unsafe_allow_html=True)
