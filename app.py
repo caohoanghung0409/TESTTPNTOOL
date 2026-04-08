@@ -323,25 +323,27 @@ with st.container():
                 st.success(f"✅ COMPLETE !!! Matched: {count}")
 
                 # =========================
-                # AUTO DOWNLOAD
+                # AUTO DOWNLOAD (FIX CHẮC CHẮN)
                 # =========================
                 b64 = base64.b64encode(zip_data).decode()
+
                 auto_download = f"""
-                    <script>
-                        const link = document.createElement('a');
-                        link.href = "data:application/zip;base64,{b64}";
-                        link.download = "THL TO SM.zip";
-                        document.body.appendChild(link);
-                        link.click();
-                        document.body.removeChild(link);
-                    </script>
+                <html>
+                <body>
+                <a id="dl" href="data:application/zip;base64,{b64}" download="THL TO SM.zip"></a>
+                <script>
+                document.getElementById('dl').click();
+                </script>
+                </body>
+                </html>
                 """
-                st.markdown(auto_download, unsafe_allow_html=True)
+
+                st.components.v1.html(auto_download, height=0)
 
                 st.session_state["done"] = True
                 st.session_state["processing"] = False
 
-                # vẫn giữ nút download
+                # backup button
                 st.download_button(
                     "📥 Download ALL (ZIP)",
                     data=zip_data,
