@@ -50,22 +50,46 @@ if "done" not in st.session_state:
     st.session_state["done"] = False
 
 # =========================
-# PALETTE (PASTEL - dễ nhìn)
+# PALETTE (pastel dễ nhìn)
 # =========================
 PALETTE = [
-    "FFB3BA","FFDFBA","FFFFBA","BAFFC9","BAE1FF",
-    "E3BAFF","FFC6FF","C6FFFA","F1FFC6","D6D6D6",
-    "FFD6A5","Caffbf","9bf6ff","a0c4ff","bdb2ff"
+    "FFF2CC","FCE4D6","E2EFDA","DDEBF7","E4DFEC",
+    "F8CBAD","C6E0B4","BDD7EE","D9D2E9","FFD966",
+    "A9D18E","9DC3E6"
 ]
 
 # =========================
-# FIX EXCEL STYLE
+# FIX EXCEL (quan trọng)
 # =========================
+def fix_excel(path):
+    tmp = os.path.join(tempfile.gettempdir(), f"fix_{uuid.uuid4().hex}")
+    os.makedirs(tmp, exist_ok=True)
+
+    with zipfile.ZipFile(path, 'r') as z:
+        z.extractall(tmp)
+
+    # remove styles.xml (an toàn nhất)
+    style_path = os.path.join(tmp, "xl", "styles.xml")
+    if os.path.exists(style_path):
+        try:
+            os.remove(style_path)
+        except:
+            pass
+
+    fixed_path = path.replace(".xlsx", "_fixed.xlsx")
+    shutil.make_archive(fixed_path.replace(".xlsx", ""), 'zip', tmp)
+    os.rename(fixed_path.replace(".xlsx", ".zip"), fixed_path)
+
+    return fixed_path
+
+
 def safe_load(path):
     try:
         return load_workbook(path)
     except:
-        return load_workbook(path)
+        fixed = fix_excel(path)
+        return load_workbook(fixed)
+
 
 def find_shipment_col(ws):
     for cell in ws[1]:
@@ -73,8 +97,9 @@ def find_shipment_col(ws):
             return cell.column
     return None
 
+
 # =========================
-# UI
+# UI HEADER
 # =========================
 st.markdown("""
 <div class="header">
@@ -105,7 +130,7 @@ with st.container():
                     path_tpn, path_book1 = None, None
 
                     # =========================
-                    # LOAD FILES
+                    # phân loại file
                     # =========================
                     for file in uploaded_files:
                         path = os.path.join(tmp_dir, file.name)
@@ -122,15 +147,15 @@ with st.container():
                             path_book1 = path
 
                     # =========================
-                    # BOOK1 (KEHOACH) - lấy số theo từng dòng
+                    # BOOK1 -> map theo từng dòng
                     # =========================
-                    df_book1 = pd.read_excel(path_book1, header=None, dtype=str)
+                    df = pd.read_excel(path_book1, header=None, dtype=str)
 
-                    book1_rows = []
+                    row_numbers = []
                     all_numbers = set()
 
-                    for _, row in df_book1.iterrows():
-                        text = "" if pd.isna(row.iloc[0]) else str(row.iloc[0])
+                    for _, r in df.iterrows():
+                        text = "" if pd.isna(r.iloc[0]) else str(r.iloc[0])
 
                         nums = set()
                         for n in re.findall(r"\d+", text):
@@ -139,38 +164,33 @@ with st.container():
                             if len(n) == 4:
                                 nums.add(n)
 
-                        book1_rows.append(nums)
+                        row_numbers.append(nums)
                         all_numbers.update(nums)
 
-                    # =========================
-                    # MAP COLOR THEO ROW (QUAN TRỌNG FIX)
-                    # =========================
-                    row_color = {}
-                    for i in range(len(book1_rows)):
-                        row_color[i] = PALETTE[i % len(PALETTE)]
+                    # mỗi dòng 1 màu
+                    row_color = {i: PALETTE[i % len(PALETTE)] for i in range(len(row_numbers))}
 
                     # =========================
                     # LOAD TPN
                     # =========================
                     wb = safe_load(path_tpn)
                     ws = wb.active
-                    col_index = find_shipment_col(ws)
 
-                    if col_index is None:
-                        st.error("Không tìm thấy cột Shipment Nbr")
+                    col = find_shipment_col(ws)
+                    if not col:
+                        st.error("Không tìm thấy Shipment Nbr")
                         st.stop()
 
                     # header style
-                    header_fill = PatternFill("solid", fgColor="FF1F4E79")
                     for c in ws[1]:
-                        c.fill = header_fill
+                        c.fill = PatternFill("solid", fgColor="FF1F4E79")
                         c.font = Font(color="FFFFFFFF", bold=True)
 
                     # =========================
-                    # TÔ MÀU TPN_KET_QUA (FIX)
+                    # TÔ MÀU KET_QUA
                     # =========================
                     for i in range(2, ws.max_row + 1):
-                        val = ws.cell(i, col_index).value
+                        val = ws.cell(i, col).value
                         if not val:
                             continue
 
@@ -181,96 +201,83 @@ with st.container():
                             if len(n) == 4:
                                 nums.add(n)
 
-                        match_nums = nums & all_numbers
-
-                        if not match_nums:
+                        match = nums & all_numbers
+                        if not match:
                             continue
 
-                        # tìm row bên book1 chứa các số này
-                        chosen_row = None
-                        for idx, rset in enumerate(book1_rows):
-                            if len(match_nums & rset) > 0:
-                                chosen_row = idx
+                        chosen = None
+                        for idx, rset in enumerate(row_numbers):
+                            if len(match & rset) > 0:
+                                chosen = idx
                                 break
 
-                        if chosen_row is not None:
-                            color = row_color[chosen_row]
-                        else:
-                            color = "D9D9D9"
+                        color = row_color[chosen] if chosen is not None else "DDDDDD"
 
-                        ws.cell(i, col_index).fill = PatternFill(
-                            "solid",
-                            fgColor=color
-                        )
+                        ws.cell(i, col).fill = PatternFill("solid", fgColor=color)
 
                     save_path = os.path.join(tmp_dir, "TPN_KET_QUA.xlsx")
                     wb.save(save_path)
                     wb.close()
 
                     # =========================
-                    # FILE KEHOACH (FIX CHỈ TÔ SỐ TRÙNG)
+                    # FILE KEHOACH (chỉ tô số trùng)
                     # =========================
                     df2 = pd.read_excel(path_book1, header=None, dtype=str)
 
                     kehoach_path = os.path.join(tmp_dir, "TPN_KE_HOACH_XE.xlsx")
                     workbook = xlsxwriter.Workbook(kehoach_path)
-                    worksheet = workbook.add_worksheet()
+                    ws2 = workbook.add_worksheet()
 
-                    normal = workbook.add_format({})
-                    red = workbook.add_format({'font_color': '#FF3B30'})
-
-                    col_width = 0
+                    normal = workbook.add_format()
+                    red = workbook.add_format({"font_color": "#E74C3C"})
 
                     for r, row in df2.iterrows():
                         text = "" if pd.isna(row.iloc[0]) else str(row.iloc[0])
-                        col_width = max(col_width, len(text))
 
                         parts = []
                         last = 0
 
                         for m in re.finditer(r"\d+", text):
-                            start, end = m.span()
+                            s, e = m.span()
 
-                            if start > last:
-                                parts += [normal, text[last:start]]
+                            if s > last:
+                                parts += [normal, text[last:s]]
 
                             num = m.group()
                             check = num if len(num) != 3 else "0" + num
 
-                            # CHỈ TÔ NẾU TRÙNG
                             if len(check) == 4 and check in all_numbers:
                                 parts += [red, num]
                             else:
                                 parts += [normal, num]
 
-                            last = end
+                            last = e
 
                         if last < len(text):
                             parts += [normal, text[last:]]
 
                         try:
-                            worksheet.write_rich_string(r, 0, *parts)
+                            ws2.write_rich_string(r, 0, *parts)
                         except:
-                            worksheet.write(r, 0, text)
+                            ws2.write(r, 0, text)
 
-                    worksheet.set_column(0, 0, col_width + 3)
                     workbook.close()
 
                     # =========================
                     # ZIP
                     # =========================
-                    zip_path = os.path.join(tmp_dir, "TPN_COMPLETE.zip")
+                    zip_path = os.path.join(tmp_dir, "TPN_RESULT.zip")
 
                     with zipfile.ZipFile(zip_path, "w") as z:
                         z.write(save_path, "TPN_KET_QUA.xlsx")
                         z.write(kehoach_path, "TPN_KE_HOACH_XE.xlsx")
 
                     with open(zip_path, "rb") as f:
-                        zip_data = f.read()
+                        data = f.read()
 
-                st.success("✅ COMPLETE !!!")
+                st.success("✅ DONE")
 
-                b64 = base64.b64encode(zip_data).decode()
+                b64 = base64.b64encode(data).decode()
 
                 st.components.v1.html(f"""
                     <a id="dl" href="data:application/zip;base64,{b64}" download="THL_TO_SM.zip"></a>
@@ -280,11 +287,11 @@ with st.container():
                 st.session_state["done"] = True
 
             except Exception as e:
-                st.error("❌ Có lỗi xảy ra:")
+                st.error("❌ Lỗi:")
                 st.exception(e)
 
     if st.session_state["done"]:
-        if st.button("🔄 Xử lý file mới"):
+        if st.button("🔄 Làm file mới"):
             st.session_state["uploader_key"] += 1
             st.session_state["done"] = False
             st.rerun()
