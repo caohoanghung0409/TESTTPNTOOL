@@ -73,7 +73,28 @@ def auto_download(data, filename):
 
 
 # =========================
-# NORMALIZE TEXT (FIX LỖI FILE EXPORT)
+# FIX FILE EXCEL LỖI STYLE
+# =========================
+def load_workbook_safe(path):
+    try:
+        return load_workbook(path, data_only=True)
+    except Exception:
+        import zipfile
+        import tempfile
+
+        tmp = tempfile.mktemp(suffix=".xlsx")
+
+        with zipfile.ZipFile(path, 'r') as zin:
+            with zipfile.ZipFile(tmp, 'w') as zout:
+                for item in zin.infolist():
+                    if "styles.xml" not in item.filename:
+                        zout.writestr(item, zin.read(item.filename))
+
+        return load_workbook(tmp, data_only=True)
+
+
+# =========================
+# NORMALIZE TEXT
 # =========================
 def normalize_text(s):
     if s is None:
@@ -90,10 +111,10 @@ def normalize_text(s):
 
 
 # =========================
-# FIND COLUMN (FIXED)
+# FIND COLUMN
 # =========================
 def find_shipment_col(ws):
-    for r in range(1, 6):  # scan nhiều dòng header
+    for r in range(1, 6):
         for cell in ws[r]:
             val = normalize_text(cell.value)
             if "shipment" in val and "nbr" in val:
@@ -102,7 +123,7 @@ def find_shipment_col(ws):
 
 
 # =========================
-# HEADER
+# HEADER UI
 # =========================
 st.markdown("""
 <div class="header">
@@ -155,7 +176,7 @@ with st.container():
                     with open(path, "wb") as f:
                         f.write(file.read())
 
-                    wb_check = load_workbook(path, read_only=True, data_only=True)
+                    wb_check = load_workbook_safe(path)
                     ws_check = wb_check.active
                     header = [normalize_text(c.value) for c in ws_check[1]]
                     wb_check.close()
@@ -183,13 +204,13 @@ with st.container():
                         if len(num) == 4:
                             all_numbers.add(num)
 
-                wb = load_workbook(path_tpn)
+                wb = load_workbook_safe(path_tpn)
                 ws = wb.active
 
                 col_index = find_shipment_col(ws)
 
                 if not col_index:
-                    st.error("❌ Không tìm thấy cột Shipment Nbr (file export lỗi format)")
+                    st.error("❌ Không tìm thấy cột Shipment Nbr")
                     st.stop()
 
                 yellow = PatternFill("solid", fgColor="FFFF00")
@@ -289,7 +310,6 @@ with st.container():
     # =========================
     if st.session_state["done"]:
         st.success(f"✅ COMPLETE !!! Matched: {st.session_state['match_count']}")
-
         auto_download(st.session_state["zip_data"], "THL_TO_SM.zip")
 
         if st.button("🔄 Xử lý file mới", use_container_width=True):
