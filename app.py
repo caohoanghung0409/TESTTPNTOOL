@@ -73,13 +73,30 @@ def auto_download(data, filename):
 
 
 # =========================
-# FIND COLUMN
+# NORMALIZE TEXT (FIX LỖI FILE EXPORT)
+# =========================
+def normalize_text(s):
+    if s is None:
+        return ""
+    s = str(s)
+
+    s = s.replace("\xa0", " ")
+    s = s.replace("\ufeff", "")
+    s = s.replace("\u200b", "")
+    s = s.replace("\r", " ").replace("\n", " ")
+
+    s = re.sub(r"\s+", " ", s)
+    return s.strip().lower()
+
+
+# =========================
+# FIND COLUMN (FIXED)
 # =========================
 def find_shipment_col(ws):
-    for cell in ws[1]:
-        if cell.value:
-            v = str(cell.value).replace("\xa0", " ").strip()
-            if "Shipment Nbr" in v:
+    for r in range(1, 6):  # scan nhiều dòng header
+        for cell in ws[r]:
+            val = normalize_text(cell.value)
+            if "shipment" in val and "nbr" in val:
                 return cell.column
     return None
 
@@ -104,7 +121,6 @@ with st.container():
         key=f"uploader_{st.session_state['uploader_key']}"
     )
 
-    # RESET khi đổi file
     current_hash = None
     if uploaded_files:
         current_hash = "|".join(sorted([f.name for f in uploaded_files]))
@@ -122,7 +138,7 @@ with st.container():
     can_run = ready and (not st.session_state["done"])
 
     # =========================
-    # CHẠY XỬ LÝ (AUTO SAU RERUN)
+    # PROCESS
     # =========================
     if st.session_state["processing"] and not st.session_state["done"]:
 
@@ -139,12 +155,12 @@ with st.container():
                     with open(path, "wb") as f:
                         f.write(file.read())
 
-                    wb_check = load_workbook(path, read_only=True)
+                    wb_check = load_workbook(path, read_only=True, data_only=True)
                     ws_check = wb_check.active
-                    header = [str(c.value).strip() if c.value else "" for c in ws_check[1]]
+                    header = [normalize_text(c.value) for c in ws_check[1]]
                     wb_check.close()
 
-                    if any("Shipment Nbr" in h for h in header):
+                    if any("shipment" in h for h in header):
                         path_tpn = path
                     else:
                         path_book1 = path
@@ -171,6 +187,11 @@ with st.container():
                 ws = wb.active
 
                 col_index = find_shipment_col(ws)
+
+                if not col_index:
+                    st.error("❌ Không tìm thấy cột Shipment Nbr (file export lỗi format)")
+                    st.stop()
+
                 yellow = PatternFill("solid", fgColor="FFFF00")
 
                 ketqua_numbers = set()
@@ -259,15 +280,16 @@ with st.container():
             st.session_state["done"] = True
             st.session_state["processing"] = False
 
-        except Exception:
+        except Exception as e:
             st.session_state["processing"] = False
-            st.error("❌ Có lỗi xảy ra!")
+            st.error(f"❌ Có lỗi xảy ra: {e}")
 
     # =========================
-    # HIỂN THỊ KẾT QUẢ
+    # RESULT
     # =========================
     if st.session_state["done"]:
         st.success(f"✅ COMPLETE !!! Matched: {st.session_state['match_count']}")
+
         auto_download(st.session_state["zip_data"], "THL_TO_SM.zip")
 
         if st.button("🔄 Xử lý file mới", use_container_width=True):
