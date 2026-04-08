@@ -52,14 +52,8 @@ footer {visibility: hidden;}
 if "uploader_key" not in st.session_state:
     st.session_state["uploader_key"] = 0
 
-if "processing" not in st.session_state:
-    st.session_state["processing"] = False
-
 if "done" not in st.session_state:
     st.session_state["done"] = False
-
-if "last_file_hash" not in st.session_state:
-    st.session_state["last_file_hash"] = None
 
 
 # =========================
@@ -115,6 +109,16 @@ def find_shipment_col(ws):
 
 
 # =========================
+# COLOR PALETTE (NHẠT + KHÁC NHAU)
+# =========================
+PALETTE = [
+    "FFF9C4", "C8E6C9", "BBDEFB", "F8BBD0", "D1C4E9",
+    "FFE0B2", "B2EBF2", "DCEDC8", "FFCDD2", "D7CCC8",
+    "E1F5FE", "F0F4C3", "E6EE9C", "CFD8DC"
+]
+
+
+# =========================
 # UI
 # =========================
 st.markdown("""
@@ -162,7 +166,9 @@ with st.container():
                     save_path = os.path.join(tmp_dir, "TPN_KET_QUA.xlsx")
                     kehoach_path = os.path.join(tmp_dir, "TPN_KE_HOACH_XE.xlsx")
 
-                    # ====== xử lý số ======
+                    # =========================
+                    # LẤY SỐ TỪ BOOK1
+                    # =========================
                     df = pd.read_excel(path_book1, usecols=[0], dtype=str)
                     all_numbers = set()
 
@@ -173,12 +179,39 @@ with st.container():
                             if len(num) == 4:
                                 all_numbers.add(num)
 
+                    # =========================
+                    # ĐỌC KẾ HOẠCH -> TẠO MAP NUMBER -> COLOR
+                    # =========================
+                    df2 = pd.read_excel(path_book1, header=None, dtype=str)
+
+                    number_color_map = {}
+                    color_index = 0
+
+                    for _, row in df2.iterrows():
+                        text = "" if pd.isna(row.iloc[0]) else str(row.iloc[0])
+
+                        nums_in_row = set()
+                        for m in re.finditer(r"\d+", text):
+                            num = m.group()
+                            num = "0"+num if len(num) == 3 else num
+                            if len(num) == 4:
+                                nums_in_row.add(num)
+
+                        if nums_in_row:
+                            color = PALETTE[color_index % len(PALETTE)]
+                            color_index += 1
+
+                            for n in nums_in_row:
+                                if n not in number_color_map:
+                                    number_color_map[n] = color
+
+                    # =========================
+                    # LOAD TPN
+                    # =========================
                     wb = safe_load(path_tpn)
                     ws = wb.active
                     col_index = find_shipment_col(ws)
 
-                    # ====== style giống code cũ ======
-                    yellow = PatternFill("solid", fgColor="FFFF00")
                     header_fill = PatternFill("solid", fgColor="000080")
                     header_font = Font(color="FFFFFF", bold=True)
                     bold_font = Font(bold=True)
@@ -192,24 +225,35 @@ with st.container():
                             if cell.value:
                                 cell.font = bold_font
 
-                    ketqua_numbers = set()
+                    # =========================
+                    # TÔ MÀU TPN_KET_QUA (THEO MAP)
+                    # =========================
                     count = 0
 
                     for i in range(2, ws.max_row + 1):
                         val = ws.cell(i, col_index).value
+
                         if val:
                             nums = set()
                             for num in re.findall(r"\d+", str(val)):
-                                if len(num) == 3:
-                                    num = "0" + num
+                                num = "0"+num if len(num) == 3 else num
                                 if len(num) == 4:
                                     nums.add(num)
 
-                            ketqua_numbers.update(nums)
+                            matched = nums & all_numbers
 
-                            if nums & all_numbers:
-                                ws.cell(i, col_index).fill = yellow
-                                count += 1
+                            if matched:
+                                # lấy màu theo từng số, ưu tiên số đầu tiên có map
+                                chosen_color = None
+                                for n in matched:
+                                    if n in number_color_map:
+                                        chosen_color = number_color_map[n]
+                                        break
+
+                                if chosen_color:
+                                    fill = PatternFill("solid", fgColor=chosen_color)
+                                    ws.cell(i, col_index).fill = fill
+                                    count += 1
 
                     ws.sheet_view.selection = [Selection(activeCell="A1", sqref="A1")]
                     ws.sheet_view.topLeftCell = "A1"
@@ -217,9 +261,9 @@ with st.container():
                     wb.save(save_path)
                     wb.close()
 
-                    # ====== file kế hoạch ======
-                    df2 = pd.read_excel(path_book1, header=None, dtype=str)
-
+                    # =========================
+                    # FILE KẾ HOẠCH (GIỮ NGUYÊN)
+                    # =========================
                     workbook = xlsxwriter.Workbook(kehoach_path)
                     worksheet = workbook.add_worksheet()
 
@@ -243,7 +287,7 @@ with st.container():
                             if start > last:
                                 parts += [normal, text[last:start]]
 
-                            parts += [red if check in ketqua_numbers else normal, num]
+                            parts += [red if check in number_color_map else normal, num]
                             last = end
 
                         if last < len(text):
@@ -254,12 +298,12 @@ with st.container():
                         except:
                             worksheet.write(r, 0, text)
 
-                    # ===== auto width =====
                     worksheet.set_column(0, 0, col_width + 3)
-
                     workbook.close()
 
-                    # zip
+                    # =========================
+                    # ZIP
+                    # =========================
                     zip_path = os.path.join(tmp_dir, "TPN_COMPLETE.zip")
                     with zipfile.ZipFile(zip_path, "w") as z:
                         z.write(save_path, "TPN_KET_QUA.xlsx")
@@ -270,7 +314,6 @@ with st.container():
 
                 st.success(f"✅ COMPLETE !!! Matched: {count}")
 
-                # auto download
                 b64 = base64.b64encode(zip_data).decode()
                 st.components.v1.html(f"""
                     <a id="dl" href="data:application/zip;base64,{b64}" download="THL TO SM.zip"></a>
