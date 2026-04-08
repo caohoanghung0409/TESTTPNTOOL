@@ -58,9 +58,23 @@ if "processing" not in st.session_state:
 if "done" not in st.session_state:
     st.session_state["done"] = False
 
-if "last_file_hash" not in st.session_state:
-    st.session_state["last_file_hash"] = None
-
+# =========================
+# COLOR PALETTE (TƯƠNG PHẢN MẠNH)
+# =========================
+COLOR_PALETTE = [
+    "FF3B30",  # đỏ
+    "34C759",  # xanh lá
+    "007AFF",  # xanh dương
+    "FF9500",  # cam
+    "AF52DE",  # tím
+    "FF2D55",  # hồng đậm
+    "5856D6",  # xanh tím
+    "00C7BE",  # xanh ngọc
+    "FFCC00",  # vàng đậm
+    "FF6B00",  # cam đậm
+    "4CD964",  # xanh lá nhạt đậm
+    "1E90FF",  # xanh biển
+]
 
 # =========================
 # FIX EXCEL
@@ -162,7 +176,9 @@ with st.container():
                     save_path = os.path.join(tmp_dir, "TPN_KET_QUA.xlsx")
                     kehoach_path = os.path.join(tmp_dir, "TPN_KE_HOACH_XE.xlsx")
 
-                    # ====== xử lý số ======
+                    # =========================
+                    # LẤY SỐ TỪ BOOK1
+                    # =========================
                     df = pd.read_excel(path_book1, usecols=[0], dtype=str)
                     all_numbers = set()
 
@@ -173,11 +189,13 @@ with st.container():
                             if len(num) == 4:
                                 all_numbers.add(num)
 
+                    # =========================
+                    # LOAD TPN
+                    # =========================
                     wb = safe_load(path_tpn)
                     ws = wb.active
                     col_index = find_shipment_col(ws)
 
-                    # ====== style giống code cũ ======
                     yellow = PatternFill("solid", fgColor="FFFF00")
                     header_fill = PatternFill("solid", fgColor="000080")
                     header_font = Font(color="FFFFFF", bold=True)
@@ -193,12 +211,21 @@ with st.container():
                                 cell.font = bold_font
 
                     ketqua_numbers = set()
-                    count = 0
 
+                    # =========================
+                    # MAP SỐ -> MÀU (QUAN TRỌNG)
+                    # =========================
+                    number_color_map = {}
+                    color_index = 0
+
+                    # =========================
+                    # TÔ MÀU TỪ TPN
+                    # =========================
                     for i in range(2, ws.max_row + 1):
                         val = ws.cell(i, col_index).value
                         if val:
                             nums = set()
+
                             for num in re.findall(r"\d+", str(val)):
                                 if len(num) == 3:
                                     num = "0" + num
@@ -207,23 +234,31 @@ with st.container():
 
                             ketqua_numbers.update(nums)
 
+                            # gán màu cho từng số (KHÔNG trùng, tránh giống nhau)
+                            row_color = None
+                            for n in nums:
+                                if n in all_numbers:
+                                    if n not in number_color_map:
+                                        number_color_map[n] = COLOR_PALETTE[color_index % len(COLOR_PALETTE)]
+                                        color_index += 1
+
+                                    row_color = number_color_map[n]
+
+                            # tô dòng TPN_KET_QUA
                             if nums & all_numbers:
                                 ws.cell(i, col_index).fill = yellow
-                                count += 1
-
-                    ws.sheet_view.selection = [Selection(activeCell="A1", sqref="A1")]
-                    ws.sheet_view.topLeftCell = "A1"
 
                     wb.save(save_path)
                     wb.close()
 
-                    # ====== file kế hoạch ======
+                    # =========================
+                    # FILE KẾ HOẠCH (RICH TEXT)
+                    # =========================
                     df2 = pd.read_excel(path_book1, header=None, dtype=str)
 
                     workbook = xlsxwriter.Workbook(kehoach_path)
                     worksheet = workbook.add_worksheet()
 
-                    red = workbook.add_format({'font_color': 'red'})
                     normal = workbook.add_format({})
 
                     col_width = 0
@@ -240,10 +275,13 @@ with st.container():
                             start, end = m.span()
                             check = "0"+num if len(num)==3 else num
 
+                            color_hex = number_color_map.get(check, None)
+                            fmt = workbook.add_format({'font_color': color_hex}) if color_hex else normal
+
                             if start > last:
                                 parts += [normal, text[last:start]]
 
-                            parts += [red if check in ketqua_numbers else normal, num]
+                            parts += [fmt, num]
                             last = end
 
                         if last < len(text):
@@ -254,12 +292,12 @@ with st.container():
                         except:
                             worksheet.write(r, 0, text)
 
-                    # ===== auto width =====
                     worksheet.set_column(0, 0, col_width + 3)
-
                     workbook.close()
 
-                    # zip
+                    # =========================
+                    # ZIP OUTPUT
+                    # =========================
                     zip_path = os.path.join(tmp_dir, "TPN_COMPLETE.zip")
                     with zipfile.ZipFile(zip_path, "w") as z:
                         z.write(save_path, "TPN_KET_QUA.xlsx")
@@ -268,9 +306,8 @@ with st.container():
                     with open(zip_path, "rb") as f:
                         zip_data = f.read()
 
-                st.success(f"✅ COMPLETE !!! Matched: {count}")
+                st.success("✅ COMPLETE !!!")
 
-                # auto download
                 b64 = base64.b64encode(zip_data).decode()
                 st.components.v1.html(f"""
                     <a id="dl" href="data:application/zip;base64,{b64}" download="THL TO SM.zip"></a>
