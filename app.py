@@ -7,6 +7,7 @@ import zipfile
 import shutil
 import uuid
 import xlsxwriter
+import base64
 
 from openpyxl import load_workbook
 from openpyxl.styles import PatternFill, Font
@@ -164,9 +165,6 @@ with st.container():
     ready = uploaded_files and len(uploaded_files) == 2
     can_run = ready and (not st.session_state["processing"]) and (not st.session_state["done"])
 
-    # =========================
-    # CHỈ HIỆN NÚT KHI ĐỦ 2 FILE
-    # =========================
     if ready:
         if st.button("🚀 Bắt đầu xử lý", disabled=not can_run):
 
@@ -324,9 +322,26 @@ with st.container():
 
                 st.success(f"✅ COMPLETE !!! Matched: {count}")
 
+                # =========================
+                # AUTO DOWNLOAD
+                # =========================
+                b64 = base64.b64encode(zip_data).decode()
+                auto_download = f"""
+                    <script>
+                        const link = document.createElement('a');
+                        link.href = "data:application/zip;base64,{b64}";
+                        link.download = "THL TO SM.zip";
+                        document.body.appendChild(link);
+                        link.click();
+                        document.body.removeChild(link);
+                    </script>
+                """
+                st.markdown(auto_download, unsafe_allow_html=True)
+
                 st.session_state["done"] = True
                 st.session_state["processing"] = False
 
+                # vẫn giữ nút download
                 st.download_button(
                     "📥 Download ALL (ZIP)",
                     data=zip_data,
