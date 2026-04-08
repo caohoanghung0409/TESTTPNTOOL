@@ -6,7 +6,6 @@ import os
 import zipfile
 import xlsxwriter
 import base64
-import shutil
 
 from openpyxl import load_workbook
 from openpyxl.styles import PatternFill
@@ -40,7 +39,6 @@ footer {visibility: hidden;}
 </style>
 """, unsafe_allow_html=True)
 
-
 # =========================
 # STATE
 # =========================
@@ -54,33 +52,6 @@ for key, val in {
 }.items():
     if key not in st.session_state:
         st.session_state[key] = val
-
-
-# =========================
-# FIX FILE EXCEL (QUAN TRỌNG)
-# =========================
-def repair_excel_file(file_path):
-    """
-    Fix file Excel export từ phần mềm bị lỗi styles.xml
-    """
-    try:
-        tmp_fixed = file_path.replace(".xlsx", "_fixed.xlsx")
-
-        with zipfile.ZipFile(file_path, 'r') as zin:
-            with zipfile.ZipFile(tmp_fixed, 'w') as zout:
-                for item in zin.infolist():
-                    # bỏ styles lỗi
-                    if item.filename == "xl/styles.xml":
-                        continue
-
-                    data = zin.read(item.filename)
-                    zout.writestr(item, data)
-
-        return tmp_fixed
-
-    except Exception:
-        # nếu repair fail thì trả file gốc
-        return file_path
 
 
 # =========================
@@ -123,7 +94,6 @@ st.markdown("""
 </div>
 """, unsafe_allow_html=True)
 
-
 with st.container():
     st.markdown('<div class="card">', unsafe_allow_html=True)
 
@@ -134,6 +104,7 @@ with st.container():
         key=f"uploader_{st.session_state['uploader_key']}"
     )
 
+    # RESET khi đổi file
     current_hash = None
     if uploaded_files:
         current_hash = "|".join(sorted([f.name for f in uploaded_files]))
@@ -150,9 +121,8 @@ with st.container():
     ready = uploaded_files and len(uploaded_files) == 2
     can_run = ready and (not st.session_state["done"])
 
-
     # =========================
-    # PROCESS
+    # CHẠY XỬ LÝ (AUTO SAU RERUN)
     # =========================
     if st.session_state["processing"] and not st.session_state["done"]:
 
@@ -167,10 +137,7 @@ with st.container():
                     path = os.path.join(tmp_dir, file.name)
 
                     with open(path, "wb") as f:
-                        f.write(file.getbuffer())
-
-                    # 🔥 FIX FILE NGAY SAU KHI SAVE
-                    path = repair_excel_file(path)
+                        f.write(file.read())
 
                     wb_check = load_workbook(path, read_only=True)
                     ws_check = wb_check.active
@@ -292,13 +259,12 @@ with st.container():
             st.session_state["done"] = True
             st.session_state["processing"] = False
 
-        except Exception as e:
+        except Exception:
             st.session_state["processing"] = False
-            st.error(f"❌ Có lỗi xảy ra: {e}")
-
+            st.error("❌ Có lỗi xảy ra!")
 
     # =========================
-    # RESULT
+    # HIỂN THỊ KẾT QUẢ
     # =========================
     if st.session_state["done"]:
         st.success(f"✅ COMPLETE !!! Matched: {st.session_state['match_count']}")
