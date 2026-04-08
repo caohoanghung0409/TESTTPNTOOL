@@ -43,14 +43,6 @@ footer {visibility: hidden;}
     background: #94a3b8 !important;
     opacity: 0.6;
 }
-
-.stDownloadButton>button {
-    width: 100%;
-    height: 42px;
-    border-radius: 10px;
-    background: #16a34a;
-    color: white;
-}
 </style>
 """, unsafe_allow_html=True)
 
@@ -165,11 +157,13 @@ with st.container():
     ready = uploaded_files and len(uploaded_files) == 2
     can_run = ready and (not st.session_state["processing"]) and (not st.session_state["done"])
 
-    if ready:
+    # =========================
+    # BUTTON XỬ LÝ
+    # =========================
+    if ready and not st.session_state["done"]:
         if st.button("🚀 Bắt đầu xử lý", disabled=not can_run):
 
             st.session_state["processing"] = True
-            st.session_state["done"] = False
 
             try:
                 with st.spinner("⏳ Đang xử lý..."):
@@ -184,15 +178,10 @@ with st.container():
                         with open(path, "wb") as f:
                             f.write(file.read())
 
-                        try:
-                            wb_check = safe_load(path, read_only=True)
-                            ws_check = wb_check.active
-                            header = [str(c.value).strip() if c.value else "" for c in ws_check[1]]
-                            wb_check.close()
-                        except ValueError:
-                            st.error(f"❌ File '{file.name}' không hợp lệ!")
-                            st.session_state["processing"] = False
-                            st.stop()
+                        wb_check = safe_load(path, read_only=True)
+                        ws_check = wb_check.active
+                        header = [str(c.value).strip() if c.value else "" for c in ws_check[1]]
+                        wb_check.close()
 
                         if any("Shipment Nbr" in h for h in header):
                             path_tpn = path
@@ -201,7 +190,6 @@ with st.container():
 
                     if not path_tpn or not path_book1:
                         st.error("❌ Không đúng định dạng 2 file!")
-                        st.session_state["processing"] = False
                         st.stop()
 
                     save_path = os.path.join(tmp_dir, "TPN_KET_QUA.xlsx")
@@ -211,8 +199,7 @@ with st.container():
 
                     all_numbers = set()
                     for v in df.iloc[:, 0].dropna():
-                        nums = re.findall(r"\d+", str(v))
-                        for num in nums:
+                        for num in re.findall(r"\d+", str(v)):
                             if len(num) == 3:
                                 num = "0" + num
                             if len(num) == 4:
@@ -224,18 +211,6 @@ with st.container():
                     col_index = find_shipment_col(ws)
 
                     yellow = PatternFill("solid", fgColor="FFFF00")
-                    header_fill = PatternFill("solid", fgColor="000080")
-                    header_font = Font(color="FFFFFF", bold=True)
-
-                    for cell in ws[1]:
-                        cell.fill = header_fill
-                        cell.font = header_font
-
-                    bold_font = Font(bold=True)
-                    for row in ws.iter_rows(min_row=2):
-                        for cell in row:
-                            if cell.value:
-                                cell.font = bold_font
 
                     ketqua_numbers = set()
                     count = 0
@@ -257,9 +232,6 @@ with st.container():
                                 ws.cell(i, col_index).fill = yellow
                                 count += 1
 
-                    ws.sheet_view.selection = [Selection(activeCell="A1", sqref="A1")]
-                    ws.sheet_view.topLeftCell = "A1"
-
                     wb.save(save_path)
                     wb.close()
 
@@ -271,11 +243,8 @@ with st.container():
                     red_format = workbook.add_format({'font_color': 'red'})
                     normal_format = workbook.add_format({})
 
-                    col_width = 0
-
                     for row_idx, row in df2.iterrows():
                         cell_value = "" if pd.isna(row.iloc[0]) else str(row.iloc[0])
-                        col_width = max(col_width, len(cell_value))
 
                         parts = []
                         last_idx = 0
@@ -308,7 +277,6 @@ with st.container():
                         except:
                             worksheet.write(row_idx, 0, cell_value)
 
-                    worksheet.set_column(0, 0, col_width + 3)
                     workbook.close()
 
                     zip_path = os.path.join(tmp_dir, "TPN_COMPLETE.zip")
@@ -322,38 +290,29 @@ with st.container():
 
                 st.success(f"✅ COMPLETE !!! Matched: {count}")
 
-                # =========================
-                # AUTO DOWNLOAD (FIX CHẮC CHẮN)
-                # =========================
+                # AUTO DOWNLOAD
                 b64 = base64.b64encode(zip_data).decode()
-
-                auto_download = f"""
-                <html>
-                <body>
-                <a id="dl" href="data:application/zip;base64,{b64}" download="THL TO SM.zip"></a>
-                <script>
-                document.getElementById('dl').click();
-                </script>
-                </body>
-                </html>
-                """
-
-                st.components.v1.html(auto_download, height=0)
+                st.components.v1.html(f"""
+                    <a id="dl" href="data:application/zip;base64,{b64}" download="THL TO SM.zip"></a>
+                    <script>document.getElementById('dl').click();</script>
+                """, height=0)
 
                 st.session_state["done"] = True
                 st.session_state["processing"] = False
 
-                # backup button
-                st.download_button(
-                    "📥 Download ALL (ZIP)",
-                    data=zip_data,
-                    file_name="THL TO SM.zip"
-                )
-
-                st.session_state["uploader_key"] += 1
-
             except Exception:
                 st.session_state["processing"] = False
-                st.error("❌ Có lỗi xảy ra! File không hợp lệ!")
+                st.error("❌ Có lỗi xảy ra!")
+
+    # =========================
+    # NÚT XỬ LÝ FILE MỚI
+    # =========================
+    if st.session_state["done"]:
+        if st.button("🔄 Xử lý file mới"):
+            st.session_state["uploader_key"] += 1
+            st.session_state["done"] = False
+            st.session_state["processing"] = False
+            st.session_state["last_file_hash"] = None
+            st.rerun()
 
     st.markdown('</div>', unsafe_allow_html=True)
