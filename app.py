@@ -78,18 +78,13 @@ def auto_download(data, filename):
 def load_workbook_safe(path):
     try:
         return load_workbook(path, data_only=True)
-    except Exception:
-        import zipfile
-        import tempfile
-
+    except:
         tmp = tempfile.mktemp(suffix=".xlsx")
-
         with zipfile.ZipFile(path, 'r') as zin:
             with zipfile.ZipFile(tmp, 'w') as zout:
                 for item in zin.infolist():
                     if "styles.xml" not in item.filename:
                         zout.writestr(item, zin.read(item.filename))
-
         return load_workbook(tmp, data_only=True)
 
 
@@ -100,12 +95,8 @@ def normalize_text(s):
     if s is None:
         return ""
     s = str(s)
-
-    s = s.replace("\xa0", " ")
-    s = s.replace("\ufeff", "")
-    s = s.replace("\u200b", "")
+    s = s.replace("\xa0", " ").replace("\ufeff", "").replace("\u200b", "")
     s = s.replace("\r", " ").replace("\n", " ")
-
     s = re.sub(r"\s+", " ", s)
     return s.strip().lower()
 
@@ -188,17 +179,23 @@ with st.container():
 
                 if not path_tpn or not path_book1:
                     st.error("❌ Không đúng định dạng 2 file!")
-                    st.session_state["processing"] = False
                     st.stop()
 
                 save_path = os.path.join(tmp_dir, "TPN_KET_QUA.xlsx")
                 kehoach_path = os.path.join(tmp_dir, "TPN_KE_HOACH_XE.xlsx")
 
-                df = pd.read_excel(path_book1, usecols=[0], engine="openpyxl", dtype=str)
+                # ===== FIX đọc file an toàn =====
+                df = pd.read_excel(path_book1, engine="openpyxl", dtype=str)
+
+                if df.shape[1] == 0:
+                    st.error("❌ File Book1 không có dữ liệu")
+                    st.stop()
+
+                df = df.iloc[:, [0]]
 
                 all_numbers = set()
-                for v in df.iloc[:, 0].dropna():
-                    for num in re.findall(r"\d+", str(v)):
+                for v in df.iloc[:, 0].dropna().astype(str):
+                    for num in re.findall(r"\d+", v):
                         if len(num) == 3:
                             num = "0" + num
                         if len(num) == 4:
@@ -241,7 +238,7 @@ with st.container():
                 wb.save(save_path)
                 wb.close()
 
-                # FILE 2
+                # ===== FILE 2 (FIX LIST INDEX) =====
                 df2 = pd.read_excel(path_book1, header=None, engine="openpyxl", dtype=str)
 
                 workbook = xlsxwriter.Workbook(kehoach_path)
@@ -253,7 +250,17 @@ with st.container():
                 max_len = 0
 
                 for row_idx, row in df2.iterrows():
-                    cell_value = "" if pd.isna(row.iloc[0]) else str(row.iloc[0])
+
+                    # FIX lỗi index
+                    if len(row) == 0:
+                        cell_value = ""
+                    else:
+                        try:
+                            val = row.iloc[0]
+                            cell_value = "" if pd.isna(val) else str(val)
+                        except:
+                            cell_value = ""
+
                     max_len = max(max_len, len(cell_value))
 
                     parts = []
