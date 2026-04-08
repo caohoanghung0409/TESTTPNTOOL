@@ -13,10 +13,11 @@ from openpyxl import load_workbook
 from openpyxl.styles import PatternFill, Font
 from openpyxl.worksheet.views import Selection
 
+
 st.set_page_config(page_title="THL TO SM", layout="centered")
 
 # =========================
-# CSS
+# CSS (GIỮ NGUYÊN UI)
 # =========================
 st.markdown("""
 <style>
@@ -48,21 +49,31 @@ footer {visibility: hidden;}
 
 
 # =========================
-# NORMALIZE KEY (QUAN TRỌNG NHẤT)
+# NORMALIZE NUMBER (FIX QUAN TRỌNG)
 # =========================
-def norm(num):
-    if not num:
+def norm(v):
+    if v is None:
         return None
-    s = re.sub(r"\D", "", str(num))
+
+    s = str(v)
+
+    # bỏ .0 kiểu excel
+    if s.endswith(".0"):
+        s = s[:-2]
+
+    s = re.sub(r"\D", "", s)
+
     if len(s) == 3:
         s = "0" + s
-    if len(s) == 4:
-        return s
+
+    if len(s) >= 4:
+        return s[:4]
+
     return None
 
 
 # =========================
-# FIX EXCEL STYLE (GIỮ NGUYÊN)
+# SAFE LOAD EXCEL
 # =========================
 def fix_excel_styles(path):
     tmp_dir = os.path.join(tempfile.gettempdir(), f"fix_{uuid.uuid4().hex}")
@@ -75,20 +86,6 @@ def fix_excel_styles(path):
     if os.path.exists(style_path):
         os.remove(style_path)
 
-    sheet_dir = os.path.join(tmp_dir, "xl", "worksheets")
-
-    if os.path.exists(sheet_dir):
-        for file in os.listdir(sheet_dir):
-            if file.endswith(".xml"):
-                fpath = os.path.join(sheet_dir, file)
-                with open(fpath, "r", encoding="utf-8") as f:
-                    content = f.read()
-
-                content = re.sub(r'\s*s="\d+"', '', content)
-
-                with open(fpath, "w", encoding="utf-8") as f:
-                    f.write(content)
-
     fixed_path = path.replace(".xlsx", "_fixed.xlsx")
     shutil.make_archive(fixed_path.replace(".xlsx", ""), 'zip', tmp_dir)
     os.rename(fixed_path.replace(".xlsx", ".zip"), fixed_path)
@@ -96,26 +93,25 @@ def fix_excel_styles(path):
     return fixed_path
 
 
-def safe_load(path, read_only=False):
+def safe_load(path):
     try:
-        return load_workbook(path, read_only=read_only, data_only=True, keep_links=False)
+        return load_workbook(path, data_only=True)
     except:
-        fixed = fix_excel_styles(path)
-        return load_workbook(fixed, read_only=read_only, data_only=True, keep_links=False)
+        return load_workbook(fix_excel_styles(path), data_only=True)
 
 
 # =========================
-# FIND SHIPMENT COLUMN (FIX INT INDEX)
+# FIND SHIPMENT COLUMN
 # =========================
 def find_shipment_col(ws):
     for cell in ws[1]:
         if cell.value and "Shipment Nbr" in str(cell.value):
-            return cell.column  # INT luôn
+            return cell.column
     return None
 
 
 # =========================
-# UI
+# UI HEADER
 # =========================
 st.markdown("""
 <div class="header">
@@ -123,6 +119,7 @@ st.markdown("""
     <p>Xử lý & đối soát Shipment nhanh chóng</p>
 </div>
 """, unsafe_allow_html=True)
+
 
 with st.container():
     st.markdown('<div class="card">', unsafe_allow_html=True)
@@ -152,7 +149,7 @@ with st.container():
                         with open(path, "wb") as f:
                             f.write(file.read())
 
-                        wb = safe_load(path, True)
+                        wb = safe_load(path)
                         header = [str(c.value) for c in wb.active[1]]
                         wb.close()
 
@@ -165,18 +162,20 @@ with st.container():
                     kehoach_path = os.path.join(tmp_dir, "TPN_KE_HOACH_XE.xlsx")
 
                     # =========================
-                    # LẤY DANH SÁCH SHIPMENT TỪ KE HOACH
+                    # LẤY SỐ TỪ KE HOACH (FIX FULL CỘT)
                     # =========================
-                    df = pd.read_excel(path_kehoach, usecols=[0], dtype=str)
+                    df = pd.read_excel(path_kehoach, dtype=str)
 
                     all_numbers = set()
-                    for v in df.iloc[:, 0].dropna():
-                        n = norm(v)
-                        if n:
-                            all_numbers.add(n)
+
+                    for col in df.columns:
+                        for v in df[col].dropna():
+                            n = norm(v)
+                            if n:
+                                all_numbers.add(n)
 
                     # =========================
-                    # MỞ TPN FILE
+                    # TPN PROCESS
                     # =========================
                     wb = safe_load(path_tpn)
                     ws = wb.active
@@ -185,7 +184,6 @@ with st.container():
                     yellow = PatternFill("solid", fgColor="FFFF00")
                     header_fill = PatternFill("solid", fgColor="000080")
                     header_font = Font(color="FFFFFF", bold=True)
-                    bold_font = Font(bold=True)
 
                     for cell in ws[1]:
                         cell.fill = header_fill
@@ -194,9 +192,6 @@ with st.container():
                     ketqua_numbers = set()
                     count = 0
 
-                    # =========================
-                    # TÔ MÀU TPN (CHỈ CỘT SHIPMENT)
-                    # =========================
                     for i in range(2, ws.max_row + 1):
                         val = ws.cell(i, col_index).value
                         n = norm(val)
@@ -214,7 +209,7 @@ with st.container():
                     wb.close()
 
                     # =========================
-                    # TẠO KE HOACH FILE
+                    # KE HOACH FILE (FIX MATCH)
                     # =========================
                     df2 = pd.read_excel(path_kehoach, header=None, dtype=str)
 
@@ -261,7 +256,7 @@ with st.container():
                     workbook.close()
 
                     # =========================
-                    # ZIP
+                    # ZIP OUTPUT
                     # =========================
                     zip_path = os.path.join(tmp_dir, "TPN_COMPLETE.zip")
 
@@ -274,6 +269,9 @@ with st.container():
 
                 st.success(f"✅ DONE - Matched: {count}")
 
+                # =========================
+                # AUTO DOWNLOAD
+                # =========================
                 b64 = base64.b64encode(zip_data).decode()
                 st.components.v1.html(f"""
                     <a id="dl" href="data:application/zip;base64,{b64}" download="THL_TO_SM.zip"></a>
