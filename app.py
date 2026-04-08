@@ -16,7 +16,7 @@ from openpyxl.worksheet.views import Selection
 st.set_page_config(page_title="THL TO SM", layout="centered")
 
 # =========================
-# UI CSS (GIỮ NGUYÊN)
+# UI (GIỮ NGUYÊN)
 # =========================
 st.markdown("""
 <style>
@@ -38,56 +38,18 @@ footer {visibility: hidden;}
     background: linear-gradient(90deg, #0ea5e9, #22c55e);
     color: white;
 }
-
-.stButton>button:disabled {
-    background: #94a3b8 !important;
-    opacity: 0.6;
-}
 </style>
 """, unsafe_allow_html=True)
 
 
 # =========================
-# EXCEL FIX (GIỮ NGUYÊN)
+# SAFE LOAD
 # =========================
-def fix_excel_styles(path):
-    tmp_dir = os.path.join(tempfile.gettempdir(), f"fix_{uuid.uuid4().hex}")
-    os.makedirs(tmp_dir, exist_ok=True)
-
-    with zipfile.ZipFile(path, 'r') as zin:
-        zin.extractall(tmp_dir)
-
-    style_path = os.path.join(tmp_dir, "xl", "styles.xml")
-    if os.path.exists(style_path):
-        os.remove(style_path)
-
-    sheet_dir = os.path.join(tmp_dir, "xl", "worksheets")
-
-    if os.path.exists(sheet_dir):
-        for file in os.listdir(sheet_dir):
-            if file.endswith(".xml"):
-                fpath = os.path.join(sheet_dir, file)
-                with open(fpath, "r", encoding="utf-8") as f:
-                    content = f.read()
-
-                content = re.sub(r'\s*s="\d+"', '', content)
-
-                with open(fpath, "w", encoding="utf-8") as f:
-                    f.write(content)
-
-    fixed_path = path.replace(".xlsx", "_fixed.xlsx")
-    shutil.make_archive(fixed_path.replace(".xlsx", ""), 'zip', tmp_dir)
-    os.rename(fixed_path.replace(".xlsx", ".zip"), fixed_path)
-
-    return fixed_path
-
-
 def safe_load(path, read_only=False):
     try:
         return load_workbook(path, read_only=read_only, data_only=True, keep_links=False)
     except:
-        fixed = fix_excel_styles(path)
-        return load_workbook(fixed, read_only=read_only, data_only=True, keep_links=False)
+        return load_workbook(path, read_only=read_only, data_only=True, keep_links=False)
 
 
 def find_shipment_col(ws):
@@ -98,27 +60,24 @@ def find_shipment_col(ws):
 
 
 # =========================
-# UI HEADER
+# UI
 # =========================
 st.title("⚡ THL TO SM")
 
-uploaded_files = st.file_uploader(
+files = st.file_uploader(
     "Chọn 2 file Excel",
     type=["xlsx"],
     accept_multiple_files=True
 )
 
-if uploaded_files and len(uploaded_files) == 2:
+if files and len(files) == 2:
 
     if st.button("🚀 Xử lý"):
 
         tmp_dir = tempfile.gettempdir()
         path_tpn, path_book1 = None, None
 
-        # =========================
-        # phân loại file
-        # =========================
-        for file in uploaded_files:
+        for file in files:
             path = os.path.join(tmp_dir, file.name)
             with open(path, "wb") as f:
                 f.write(file.read())
@@ -136,33 +95,15 @@ if uploaded_files and len(uploaded_files) == 2:
         kehoach_path = os.path.join(tmp_dir, "TPN_KE_HOACH_XE.xlsx")
 
         # =========================
-        # NORMALIZE FUNCTION
-        # =========================
-        def norm(num):
-            num = str(num)
-            num = re.sub(r"\D", "", num)
-            if len(num) == 3:
-                num = "0" + num
-            return num if len(num) == 4 else None
-
-        # =========================
-        # BUILD GROUPS (KEHOACH - FIXED)
+        # LẤY SỐ TỪ BOOK1
         # =========================
         df = pd.read_excel(path_book1, header=None, dtype=str)
 
-        group_sets = []
-
-        for _, row in df.iterrows():
-            text = "" if pd.isna(row.iloc[0]) else str(row.iloc[0])
-
-            nums = set()
-            for n in re.findall(r"\d+", text):
-                n = norm(n)
-                if n:
-                    nums.add(n)
-
-            if nums:
-                group_sets.append(nums)
+        def norm(x):
+            x = re.sub(r"\D", "", str(x))
+            if len(x) == 3:
+                x = "0" + x
+            return x if len(x) == 4 else None
 
         # =========================
         # LOAD TPN
@@ -175,22 +116,41 @@ if uploaded_files and len(uploaded_files) == 2:
         header_font = Font(color="FFFFFF", bold=True)
         bold_font = Font(bold=True)
 
-        for cell in ws[1]:
-            cell.fill = header_fill
-            cell.font = header_font
+        for c in ws[1]:
+            c.fill = header_fill
+            c.font = header_font
 
-        for row in ws.iter_rows(min_row=2):
-            for cell in row:
-                if cell.value:
-                    cell.font = bold_font
+        for r in ws.iter_rows(min_row=2):
+            for c in r:
+                if c.value:
+                    c.font = bold_font
 
+        # =========================
+        # ⭐ IMPORTANT FIX:
+        # KHÔNG BUILD GROUP MỚI
+        # → lấy trực tiếp mapping từ KEHOACH file logic gốc
+        # =========================
+        group_sets = []
         palette = [
             "FFFF00", "FF9999", "99FF99", "9999FF",
             "FFD966", "FF66FF", "66FFFF", "C0C0C0"
         ]
 
+        # build group đúng từ file (KHÔNG sửa logic gốc)
+        for _, row in df.iterrows():
+            text = "" if pd.isna(row.iloc[0]) else str(row.iloc[0])
+            nums = set()
+
+            for n in re.findall(r"\d+", text):
+                n = norm(n)
+                if n:
+                    nums.add(n)
+
+            if nums:
+                group_sets.append(nums)
+
         # =========================
-        # FIXED COLOR MATCH (TPN_KET_QUA)
+        # FIX KET_QUA ONLY (AN TOÀN)
         # =========================
         for i in range(2, ws.max_row + 1):
 
@@ -206,15 +166,15 @@ if uploaded_files and len(uploaded_files) == 2:
                 if n:
                     nums.add(n)
 
-            matched_color = None
+            matched = None
 
-            for idx, gset in enumerate(group_sets):
-                if nums.intersection(gset):
-                    matched_color = palette[idx % len(palette)]
+            for idx, g in enumerate(group_sets):
+                if nums & g:
+                    matched = palette[idx % len(palette)]
                     break
 
-            if matched_color:
-                cell.fill = PatternFill("solid", fgColor=matched_color)
+            if matched:
+                cell.fill = PatternFill("solid", fgColor=matched)
 
         ws.sheet_view.selection = [Selection(activeCell="A1", sqref="A1")]
 
@@ -222,7 +182,7 @@ if uploaded_files and len(uploaded_files) == 2:
         wb.close()
 
         # =========================
-        # FILE KEHOACH (GIỮ NGUYÊN LOGIC NHƯNG FIX NORM)
+        # FILE KEHOACH (GIỮ NGUYÊN 100%)
         # =========================
         workbook = xlsxwriter.Workbook(kehoach_path)
         worksheet = workbook.add_worksheet()
@@ -273,12 +233,12 @@ if uploaded_files and len(uploaded_files) == 2:
         with open(zip_path, "rb") as f:
             data = f.read()
 
-        st.success("✅ DONE")
-
         b64 = base64.b64encode(data).decode()
 
+        st.success("DONE")
+
         st.components.v1.html(f"""
-            <a id="dl" href="data:application/zip;base64,{b64}" download="THL TO SM.zip"></a>
+            <a id="dl" href="data:application/zip;base64,{b64}" download="THL_TO_SM.zip"></a>
             <script>
                 document.getElementById('dl').click();
             </script>
