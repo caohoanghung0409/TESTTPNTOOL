@@ -4,6 +4,7 @@ import re
 import tempfile
 import os
 import zipfile
+import shutil
 import uuid
 import xlsxwriter
 import base64
@@ -11,7 +12,11 @@ import base64
 from openpyxl import load_workbook
 from openpyxl.styles import PatternFill, Font
 from openpyxl.worksheet.views import Selection
+from openpyxl import Workbook
 
+# =========================
+# UI CONFIG
+# =========================
 st.set_page_config(page_title="THL TO SM", layout="centered")
 
 # =========================
@@ -51,9 +56,16 @@ if "done" not in st.session_state:
 
 
 # =========================
-# ⚡ FIX QUAN TRỌNG: SAFE LOAD (KHÔNG ĐỤNG XML NỮA)
+# 🔥 FIX TRIỆT ĐỂ OPENPYXL ERROR
 # =========================
 def safe_load(path, read_only=False):
+    """
+    FIX:
+    - expected Fill
+    - styles corruption
+    - index out of range
+    """
+
     try:
         return load_workbook(
             path,
@@ -61,16 +73,36 @@ def safe_load(path, read_only=False):
             data_only=True,
             keep_links=False
         )
+
     except Exception:
-        # fallback an toàn: pandas đọc thay openpyxl
+        # =========================
+        # FALLBACK CLEAN REBUILD
+        # =========================
         df = pd.read_excel(path, dtype=str)
-        tmp = os.path.join(tempfile.gettempdir(), f"fallback_{uuid.uuid4().hex}.xlsx")
-        df.to_excel(tmp, index=False)
-        return load_workbook(tmp, read_only=read_only)
+
+        tmp = os.path.join(
+            tempfile.gettempdir(),
+            f"safe_{uuid.uuid4().hex}.xlsx"
+        )
+
+        wb = Workbook()
+        ws = wb.active
+
+        for row in df.itertuples(index=False):
+            ws.append(list(row))
+
+        wb.save(tmp)
+        wb.close()
+
+        return load_workbook(
+            tmp,
+            read_only=read_only,
+            data_only=True
+        )
 
 
 # =========================
-# FIND SHIPMENT COLUMN
+# FIND COLUMN SHIPMENT
 # =========================
 def find_shipment_col(ws):
     for cell in ws[1]:
@@ -82,7 +114,7 @@ def find_shipment_col(ws):
 
 
 # =========================
-# UI
+# UI HEADER
 # =========================
 st.markdown("""
 <div class="header">
@@ -134,7 +166,7 @@ with st.container():
                     kehoach_path = os.path.join(tmp_dir, "TPN_KE_HOACH_XE.xlsx")
 
                     # =========================
-                    # lấy số từ book1
+                    # extract numbers
                     # =========================
                     df = pd.read_excel(path_book1, usecols=[0], dtype=str)
                     all_numbers = set()
@@ -147,7 +179,7 @@ with st.container():
                                 all_numbers.add(num)
 
                     # =========================
-                    # xử lý TPN file
+                    # process TPN
                     # =========================
                     wb = safe_load(path_tpn)
                     ws = wb.active
@@ -156,7 +188,6 @@ with st.container():
                     yellow = PatternFill("solid", fgColor="FFFF00")
                     header_fill = PatternFill("solid", fgColor="000080")
                     header_font = Font(color="FFFFFF", bold=True)
-                    bold_font = Font(bold=True)
 
                     for cell in ws[1]:
                         cell.fill = header_fill
@@ -167,8 +198,10 @@ with st.container():
 
                     for i in range(2, ws.max_row + 1):
                         val = ws.cell(i, col_index).value
+
                         if val:
                             nums = set()
+
                             for num in re.findall(r"\d+", str(val)):
                                 if len(num) == 3:
                                     num = "0" + num
@@ -210,7 +243,7 @@ with st.container():
                         for m in re.finditer(r"\d+", text):
                             num = m.group()
                             start, end = m.span()
-                            check = "0"+num if len(num)==3 else num
+                            check = "0"+num if len(num) == 3 else num
 
                             if start > last:
                                 parts += [normal, text[last:start]]
@@ -230,9 +263,10 @@ with st.container():
                     workbook.close()
 
                     # =========================
-                    # zip
+                    # zip output
                     # =========================
                     zip_path = os.path.join(tmp_dir, "TPN_COMPLETE.zip")
+
                     with zipfile.ZipFile(zip_path, "w") as z:
                         z.write(save_path, "TPN_KET_QUA.xlsx")
                         z.write(kehoach_path, "TPN_KE_HOACH_XE.xlsx")
@@ -244,7 +278,7 @@ with st.container():
 
                 b64 = base64.b64encode(zip_data).decode()
                 st.components.v1.html(f"""
-                    <a id="dl" href="data:application/zip;base64,{b64}" download="THL TO SM.zip"></a>
+                    <a id="dl" href="data:application/zip;base64,{b64}" download="THL_TO_SM.zip"></a>
                     <script>document.getElementById('dl').click();</script>
                 """, height=0)
 
