@@ -32,7 +32,7 @@ footer {visibility:hidden;}
 """, unsafe_allow_html=True)
 
 # =========================
-# COLOR
+# COLOR PALETTE
 # =========================
 COLOR_PALETTE = [
     "FFFF3B30","FF34C759","FF007AFF","FFFF9500",
@@ -40,10 +40,17 @@ COLOR_PALETTE = [
     "FFFFCC00","FFFF6B00","FF4CD964","FF1E90FF"
 ]
 
-def load_safe(path):
-    return load_workbook(path, data_only=True, keep_links=False)
+# =========================
+# SAFE LOAD (FIX LỖI STYLE EXCEL)
+# =========================
+def safe_load_workbook(path):
+    try:
+        return load_workbook(path, data_only=True, keep_links=False)
+    except Exception:
+        # fallback chống file Excel bị lỗi styles.xml
+        return load_workbook(path, data_only=True, read_only=True)
 
-def find_col(ws):
+def find_shipment_col(ws):
     for c in ws[1]:
         if c.value and "Shipment Nbr" in str(c.value):
             return c.column
@@ -86,7 +93,7 @@ if files and len(files) == 2 and st.button("RUN"):
             else:
                 file_book = path
 
-        # ================= BOOK DATA =================
+        # ================= EXTRACT BOOK DATA =================
         df = pd.read_excel(file_book, usecols=[0], dtype=str)
 
         all_numbers = set()
@@ -97,11 +104,11 @@ if files and len(files) == 2 and st.button("RUN"):
                 if len(n) == 4:
                     all_numbers.add(n)
 
-        # ================= LOAD TPN =================
-        wb = load_safe(file_tpn)
+        # ================= LOAD TPN (FIXED) =================
+        wb = safe_load_workbook(file_tpn)
         ws = wb.active
 
-        col = find_col(ws)
+        col = find_shipment_col(ws)
         if col is None:
             st.error("Không tìm thấy Shipment Nbr")
             st.stop()
@@ -114,10 +121,9 @@ if files and len(files) == 2 and st.button("RUN"):
 
         number_color = {}
         color_idx = 0
-
         matched_set = set()
 
-        # ================= PROCESS ROWS =================
+        # ================= PROCESS =================
         for r in range(2, ws.max_row + 1):
 
             val = ws.cell(r, col).value
@@ -136,27 +142,27 @@ if files and len(files) == 2 and st.button("RUN"):
             if match:
                 matched_set.update(match)
 
-                # assign color per shipment
                 for m in match:
                     if m not in number_color:
                         number_color[m] = COLOR_PALETTE[color_idx % len(COLOR_PALETTE)]
                         color_idx += 1
 
                 first = list(match)[0]
+
                 ws.cell(r, col).fill = PatternFill(
                     "solid",
                     fgColor=number_color[first]
                 )
 
-        # ================= SAVE RESULT =================
+        # ================= SAVE KETQUA =================
         out_path = os.path.join(tmp, "TPN_KET_QUA.xlsx")
         wb.save(out_path)
         wb.close()
 
-        # ================= MATCH COUNT (FIXED) =================
+        # ================= MATCH COUNT =================
         st.success(f"🎯 MATCH SHIPMENT = {len(matched_set)}")
 
-        # ================= KEHOACH FILE (FIXED LOGIC) =================
+        # ================= KEHOACH =================
         df2 = pd.read_excel(file_book, header=None, dtype=str)
 
         kehoach_path = os.path.join(tmp, "TPN_KE_HOACH_XE.xlsx")
@@ -177,7 +183,6 @@ if files and len(files) == 2 and st.button("RUN"):
             parts = []
             last = 0
 
-            # ONLY highlight if number EXISTS in matched_set
             for m in re.finditer(r"\d+", text):
                 start, end = m.span()
                 num = m.group()
