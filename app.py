@@ -162,7 +162,9 @@ with st.container():
                     save_path = os.path.join(tmp_dir, "TPN_KET_QUA.xlsx")
                     kehoach_path = os.path.join(tmp_dir, "TPN_KE_HOACH_XE.xlsx")
 
-                    # ====== xử lý số ======
+                    # =========================
+                    # lấy số từ book1
+                    # =========================
                     df = pd.read_excel(path_book1, usecols=[0], dtype=str)
                     all_numbers = set()
 
@@ -173,12 +175,13 @@ with st.container():
                             if len(num) == 4:
                                 all_numbers.add(num)
 
+                    # =========================
+                    # load TPN
+                    # =========================
                     wb = safe_load(path_tpn)
                     ws = wb.active
                     col_index = find_shipment_col(ws)
 
-                    # ====== style giống code cũ ======
-                    yellow = PatternFill("solid", fgColor="FFFF00")
                     header_fill = PatternFill("solid", fgColor="000080")
                     header_font = Font(color="FFFFFF", bold=True)
                     bold_font = Font(bold=True)
@@ -192,24 +195,61 @@ with st.container():
                             if cell.value:
                                 cell.font = bold_font
 
-                    ketqua_numbers = set()
-                    count = 0
+                    # =========================
+                    # BUILD GROUP COLOR FROM KEHOACH
+                    # =========================
+                    df2 = pd.read_excel(path_book1, header=None, dtype=str)
+
+                    palette = [
+                        "FFFF00", "FF9999", "99FF99", "9999FF",
+                        "FFD966", "FF66FF", "66FFFF", "C0C0C0"
+                    ]
+
+                    group_colors = []
+                    group_sets = []
+
+                    for _, row in df2.iterrows():
+                        text = "" if pd.isna(row.iloc[0]) else str(row.iloc[0])
+                        nums = set()
+
+                        for num in re.findall(r"\d+", text):
+                            if len(num) == 3:
+                                num = "0" + num
+                            if len(num) == 4:
+                                nums.add(num)
+
+                        if nums:
+                            group_sets.append(nums)
+                            group_colors.append(palette[len(group_colors) % len(palette)])
+
+                    # =========================
+                    # APPLY COLOR TO KET_QUA (NEW LOGIC)
+                    # =========================
+                    ketqua_row_color = {}
 
                     for i in range(2, ws.max_row + 1):
                         val = ws.cell(i, col_index).value
-                        if val:
-                            nums = set()
-                            for num in re.findall(r"\d+", str(val)):
-                                if len(num) == 3:
-                                    num = "0" + num
-                                if len(num) == 4:
-                                    nums.add(num)
+                        if not val:
+                            continue
 
-                            ketqua_numbers.update(nums)
+                        nums = set()
+                        for num in re.findall(r"\d+", str(val)):
+                            if len(num) == 3:
+                                num = "0" + num
+                            if len(num) == 4:
+                                nums.add(num)
 
-                            if nums & all_numbers:
-                                ws.cell(i, col_index).fill = yellow
-                                count += 1
+                        # tìm group match đầu tiên
+                        row_color = None
+                        for idx, gset in enumerate(group_sets):
+                            if nums & gset:
+                                row_color = group_colors[idx]
+                                break
+
+                        if row_color:
+                            fill = PatternFill("solid", fgColor=row_color)
+                            for c in range(1, ws.max_column + 1):
+                                ws.cell(i, c).fill = fill
 
                     ws.sheet_view.selection = [Selection(activeCell="A1", sqref="A1")]
                     ws.sheet_view.topLeftCell = "A1"
@@ -217,9 +257,9 @@ with st.container():
                     wb.save(save_path)
                     wb.close()
 
-                    # ====== file kế hoạch ======
-                    df2 = pd.read_excel(path_book1, header=None, dtype=str)
-
+                    # =========================
+                    # file kế hoạch giữ nguyên
+                    # =========================
                     workbook = xlsxwriter.Workbook(kehoach_path)
                     worksheet = workbook.add_worksheet()
 
@@ -243,7 +283,7 @@ with st.container():
                             if start > last:
                                 parts += [normal, text[last:start]]
 
-                            parts += [red if check in ketqua_numbers else normal, num]
+                            parts += [red if check in all_numbers else normal, num]
                             last = end
 
                         if last < len(text):
@@ -254,12 +294,12 @@ with st.container():
                         except:
                             worksheet.write(r, 0, text)
 
-                    # ===== auto width =====
                     worksheet.set_column(0, 0, col_width + 3)
-
                     workbook.close()
 
-                    # zip
+                    # =========================
+                    # ZIP
+                    # =========================
                     zip_path = os.path.join(tmp_dir, "TPN_COMPLETE.zip")
                     with zipfile.ZipFile(zip_path, "w") as z:
                         z.write(save_path, "TPN_KET_QUA.xlsx")
@@ -268,9 +308,8 @@ with st.container():
                     with open(zip_path, "rb") as f:
                         zip_data = f.read()
 
-                st.success(f"✅ COMPLETE !!! Matched: {count}")
+                st.success("✅ COMPLETE !!!")
 
-                # auto download
                 b64 = base64.b64encode(zip_data).decode()
                 st.components.v1.html(f"""
                     <a id="dl" href="data:application/zip;base64,{b64}" download="THL TO SM.zip"></a>
