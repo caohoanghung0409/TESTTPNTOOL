@@ -109,16 +109,6 @@ def find_shipment_col(ws):
 
 
 # =========================
-# COLOR PALETTE (NHẠT + KHÁC NHAU)
-# =========================
-PALETTE = [
-    "FFF9C4", "C8E6C9", "BBDEFB", "F8BBD0", "D1C4E9",
-    "FFE0B2", "B2EBF2", "DCEDC8", "FFCDD2", "D7CCC8",
-    "E1F5FE", "F0F4C3", "E6EE9C", "CFD8DC"
-]
-
-
-# =========================
 # UI
 # =========================
 st.markdown("""
@@ -174,39 +164,48 @@ with st.container():
 
                     for v in df.iloc[:, 0].dropna():
                         for num in re.findall(r"\d+", str(v)):
-                            if len(num) == 3:
-                                num = "0" + num
+                            num = "0" + num if len(num) == 3 else num
                             if len(num) == 4:
                                 all_numbers.add(num)
 
                     # =========================
-                    # ĐỌC KẾ HOẠCH -> TẠO MAP NUMBER -> COLOR
+                    # LOAD KE HOACH + TẠO GROUP MÀU
                     # =========================
                     df2 = pd.read_excel(path_book1, header=None, dtype=str)
 
-                    number_color_map = {}
-                    color_index = 0
+                    palette = [
+                        "FFF9C4", "FFE0B2", "FFCDD2", "D1C4E9", "C8E6C9",
+                        "B3E5FC", "F8BBD0", "DCEDC8", "D7CCC8", "FFECB3",
+                        "CFD8DC", "F0F4C3", "B2DFDB", "E1BEE7", "FFCCBC"
+                    ]
+
+                    number_to_color = {}
+                    group_index = 0
+                    ketqua_numbers = set()
 
                     for _, row in df2.iterrows():
                         text = "" if pd.isna(row.iloc[0]) else str(row.iloc[0])
 
-                        nums_in_row = set()
-                        for m in re.finditer(r"\d+", text):
-                            num = m.group()
-                            num = "0"+num if len(num) == 3 else num
+                        nums = set()
+                        for num in re.findall(r"\d+", text):
+                            num = "0" + num if len(num) == 3 else num
                             if len(num) == 4:
-                                nums_in_row.add(num)
+                                nums.add(num)
 
-                        if nums_in_row:
-                            color = PALETTE[color_index % len(PALETTE)]
-                            color_index += 1
+                        if not nums:
+                            continue
 
-                            for n in nums_in_row:
-                                if n not in number_color_map:
-                                    number_color_map[n] = color
+                        color = palette[group_index % len(palette)]
+                        group_index += 1
+
+                        for n in nums:
+                            if n not in number_to_color:
+                                number_to_color[n] = color
+
+                        ketqua_numbers.update(nums)
 
                     # =========================
-                    # LOAD TPN
+                    # LOAD KET QUA
                     # =========================
                     wb = safe_load(path_tpn)
                     ws = wb.active
@@ -226,34 +225,38 @@ with st.container():
                                 cell.font = bold_font
 
                     # =========================
-                    # TÔ MÀU TPN_KET_QUA (THEO MAP)
+                    # TÔ MÀU THEO GROUP
                     # =========================
                     count = 0
 
                     for i in range(2, ws.max_row + 1):
                         val = ws.cell(i, col_index).value
+                        if not val:
+                            continue
 
-                        if val:
-                            nums = set()
-                            for num in re.findall(r"\d+", str(val)):
-                                num = "0"+num if len(num) == 3 else num
-                                if len(num) == 4:
-                                    nums.add(num)
+                        nums = set()
+                        for num in re.findall(r"\d+", str(val)):
+                            num = "0" + num if len(num) == 3 else num
+                            if len(num) == 4:
+                                nums.add(num)
 
-                            matched = nums & all_numbers
+                        matched = nums & ketqua_numbers
+                        if not matched:
+                            continue
 
-                            if matched:
-                                # lấy màu theo từng số, ưu tiên số đầu tiên có map
-                                chosen_color = None
-                                for n in matched:
-                                    if n in number_color_map:
-                                        chosen_color = number_color_map[n]
-                                        break
+                        # lấy màu theo group đầu tiên tìm thấy
+                        chosen_color = None
+                        for n in matched:
+                            if n in number_to_color:
+                                chosen_color = number_to_color[n]
+                                break
 
-                                if chosen_color:
-                                    fill = PatternFill("solid", fgColor=chosen_color)
-                                    ws.cell(i, col_index).fill = fill
-                                    count += 1
+                        if chosen_color:
+                            ws.cell(i, col_index).fill = PatternFill(
+                                "solid",
+                                fgColor=chosen_color
+                            )
+                            count += 1
 
                     ws.sheet_view.selection = [Selection(activeCell="A1", sqref="A1")]
                     ws.sheet_view.topLeftCell = "A1"
@@ -262,7 +265,7 @@ with st.container():
                     wb.close()
 
                     # =========================
-                    # FILE KẾ HOẠCH (GIỮ NGUYÊN)
+                    # FILE KẾ HOẠCH (GIỮ NGUYÊN LOGIC)
                     # =========================
                     workbook = xlsxwriter.Workbook(kehoach_path)
                     worksheet = workbook.add_worksheet()
@@ -287,7 +290,7 @@ with st.container():
                             if start > last:
                                 parts += [normal, text[last:start]]
 
-                            parts += [red if check in number_color_map else normal, num]
+                            parts += [red if check in ketqua_numbers else normal, num]
                             last = end
 
                         if last < len(text):
@@ -302,7 +305,7 @@ with st.container():
                     workbook.close()
 
                     # =========================
-                    # ZIP
+                    # ZIP OUTPUT
                     # =========================
                     zip_path = os.path.join(tmp_dir, "TPN_COMPLETE.zip")
                     with zipfile.ZipFile(zip_path, "w") as z:
@@ -322,8 +325,8 @@ with st.container():
 
                 st.session_state["done"] = True
 
-            except:
-                st.error("❌ Có lỗi xảy ra!")
+            except Exception as e:
+                st.error(f"❌ Có lỗi xảy ra: {e}")
 
     if st.session_state["done"]:
         if st.button("🔄 Xử lý file mới"):
