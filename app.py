@@ -12,15 +12,11 @@ import base64
 from openpyxl import load_workbook
 from openpyxl.styles import PatternFill, Font
 from openpyxl.worksheet.views import Selection
-from openpyxl import Workbook
 
-# =========================
-# UI CONFIG
-# =========================
 st.set_page_config(page_title="THL TO SM", layout="centered")
 
 # =========================
-# CSS (GIỮ NGUYÊN)
+# CSS
 # =========================
 st.markdown("""
 <style>
@@ -42,6 +38,11 @@ footer {visibility: hidden;}
     background: linear-gradient(90deg, #0ea5e9, #22c55e);
     color: white;
 }
+
+.stButton>button:disabled {
+    background: #94a3b8 !important;
+    opacity: 0.6;
+}
 </style>
 """, unsafe_allow_html=True)
 
@@ -51,59 +52,59 @@ footer {visibility: hidden;}
 if "uploader_key" not in st.session_state:
     st.session_state["uploader_key"] = 0
 
+if "processing" not in st.session_state:
+    st.session_state["processing"] = False
+
 if "done" not in st.session_state:
     st.session_state["done"] = False
 
+if "last_file_hash" not in st.session_state:
+    st.session_state["last_file_hash"] = None
+
 
 # =========================
-# 🔥 FIX TRIỆT ĐỂ OPENPYXL ERROR
+# FIX EXCEL
 # =========================
+def fix_excel_styles(path):
+    tmp_dir = os.path.join(tempfile.gettempdir(), f"fix_{uuid.uuid4().hex}")
+    os.makedirs(tmp_dir, exist_ok=True)
+
+    with zipfile.ZipFile(path, 'r') as zin:
+        zin.extractall(tmp_dir)
+
+    style_path = os.path.join(tmp_dir, "xl", "styles.xml")
+    if os.path.exists(style_path):
+        os.remove(style_path)
+
+    sheet_dir = os.path.join(tmp_dir, "xl", "worksheets")
+
+    if os.path.exists(sheet_dir):
+        for file in os.listdir(sheet_dir):
+            if file.endswith(".xml"):
+                fpath = os.path.join(sheet_dir, file)
+                with open(fpath, "r", encoding="utf-8") as f:
+                    content = f.read()
+
+                content = re.sub(r'\s*s="\d+"', '', content)
+
+                with open(fpath, "w", encoding="utf-8") as f:
+                    f.write(content)
+
+    fixed_path = path.replace(".xlsx", "_fixed.xlsx")
+    shutil.make_archive(fixed_path.replace(".xlsx", ""), 'zip', tmp_dir)
+    os.rename(fixed_path.replace(".xlsx", ".zip"), fixed_path)
+
+    return fixed_path
+
+
 def safe_load(path, read_only=False):
-    """
-    FIX:
-    - expected Fill
-    - styles corruption
-    - index out of range
-    """
-
     try:
-        return load_workbook(
-            path,
-            read_only=read_only,
-            data_only=True,
-            keep_links=False
-        )
-
-    except Exception:
-        # =========================
-        # FALLBACK CLEAN REBUILD
-        # =========================
-        df = pd.read_excel(path, dtype=str)
-
-        tmp = os.path.join(
-            tempfile.gettempdir(),
-            f"safe_{uuid.uuid4().hex}.xlsx"
-        )
-
-        wb = Workbook()
-        ws = wb.active
-
-        for row in df.itertuples(index=False):
-            ws.append(list(row))
-
-        wb.save(tmp)
-        wb.close()
-
-        return load_workbook(
-            tmp,
-            read_only=read_only,
-            data_only=True
-        )
+        return load_workbook(path, read_only=read_only, data_only=True, keep_links=False)
+    except:
+        fixed = fix_excel_styles(path)
+        return load_workbook(fixed, read_only=read_only, data_only=True, keep_links=False)
 
 
-# =========================
-# FIND COLUMN SHIPMENT
-# =========================
 def find_shipment_col(ws):
     for cell in ws[1]:
         if cell.value:
@@ -114,7 +115,7 @@ def find_shipment_col(ws):
 
 
 # =========================
-# UI HEADER
+# UI
 # =========================
 st.markdown("""
 <div class="header">
@@ -136,7 +137,6 @@ with st.container():
     ready = uploaded_files and len(uploaded_files) == 2
 
     if ready and not st.session_state["done"]:
-
         if st.button("🚀 Bắt đầu xử lý"):
 
             try:
@@ -145,9 +145,6 @@ with st.container():
                     tmp_dir = tempfile.gettempdir()
                     path_tpn, path_book1 = None, None
 
-                    # =========================
-                    # phân loại file
-                    # =========================
                     for file in uploaded_files:
                         path = os.path.join(tmp_dir, file.name)
                         with open(path, "wb") as f:
@@ -165,9 +162,7 @@ with st.container():
                     save_path = os.path.join(tmp_dir, "TPN_KET_QUA.xlsx")
                     kehoach_path = os.path.join(tmp_dir, "TPN_KE_HOACH_XE.xlsx")
 
-                    # =========================
-                    # extract numbers
-                    # =========================
+                    # ====== xử lý số ======
                     df = pd.read_excel(path_book1, usecols=[0], dtype=str)
                     all_numbers = set()
 
@@ -178,30 +173,32 @@ with st.container():
                             if len(num) == 4:
                                 all_numbers.add(num)
 
-                    # =========================
-                    # process TPN
-                    # =========================
                     wb = safe_load(path_tpn)
                     ws = wb.active
                     col_index = find_shipment_col(ws)
 
+                    # ====== style giống code cũ ======
                     yellow = PatternFill("solid", fgColor="FFFF00")
                     header_fill = PatternFill("solid", fgColor="000080")
                     header_font = Font(color="FFFFFF", bold=True)
+                    bold_font = Font(bold=True)
 
                     for cell in ws[1]:
                         cell.fill = header_fill
                         cell.font = header_font
+
+                    for row in ws.iter_rows(min_row=2):
+                        for cell in row:
+                            if cell.value:
+                                cell.font = bold_font
 
                     ketqua_numbers = set()
                     count = 0
 
                     for i in range(2, ws.max_row + 1):
                         val = ws.cell(i, col_index).value
-
                         if val:
                             nums = set()
-
                             for num in re.findall(r"\d+", str(val)):
                                 if len(num) == 3:
                                     num = "0" + num
@@ -220,9 +217,7 @@ with st.container():
                     wb.save(save_path)
                     wb.close()
 
-                    # =========================
-                    # kế hoạch file
-                    # =========================
+                    # ====== file kế hoạch ======
                     df2 = pd.read_excel(path_book1, header=None, dtype=str)
 
                     workbook = xlsxwriter.Workbook(kehoach_path)
@@ -243,7 +238,7 @@ with st.container():
                         for m in re.finditer(r"\d+", text):
                             num = m.group()
                             start, end = m.span()
-                            check = "0"+num if len(num) == 3 else num
+                            check = "0"+num if len(num)==3 else num
 
                             if start > last:
                                 parts += [normal, text[last:start]]
@@ -259,14 +254,13 @@ with st.container():
                         except:
                             worksheet.write(r, 0, text)
 
+                    # ===== auto width =====
                     worksheet.set_column(0, 0, col_width + 3)
+
                     workbook.close()
 
-                    # =========================
-                    # zip output
-                    # =========================
+                    # zip
                     zip_path = os.path.join(tmp_dir, "TPN_COMPLETE.zip")
-
                     with zipfile.ZipFile(zip_path, "w") as z:
                         z.write(save_path, "TPN_KET_QUA.xlsx")
                         z.write(kehoach_path, "TPN_KE_HOACH_XE.xlsx")
@@ -276,16 +270,17 @@ with st.container():
 
                 st.success(f"✅ COMPLETE !!! Matched: {count}")
 
+                # auto download
                 b64 = base64.b64encode(zip_data).decode()
                 st.components.v1.html(f"""
-                    <a id="dl" href="data:application/zip;base64,{b64}" download="THL_TO_SM.zip"></a>
+                    <a id="dl" href="data:application/zip;base64,{b64}" download="THL TO SM.zip"></a>
                     <script>document.getElementById('dl').click();</script>
                 """, height=0)
 
                 st.session_state["done"] = True
 
-            except Exception as e:
-                st.error(f"❌ Có lỗi xảy ra: {e}")
+            except:
+                st.error("❌ Có lỗi xảy ra!")
 
     if st.session_state["done"]:
         if st.button("🔄 Xử lý file mới"):
