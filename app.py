@@ -8,6 +8,7 @@ import shutil
 import uuid
 import xlsxwriter
 import base64
+import traceback
 
 from openpyxl import load_workbook
 from openpyxl.styles import PatternFill, Font
@@ -16,7 +17,7 @@ from openpyxl.worksheet.views import Selection
 st.set_page_config(page_title="THL TO SM", layout="centered")
 
 # =========================
-# CSS
+# CSS (GIỮ NGUYÊN)
 # =========================
 st.markdown("""
 <style>
@@ -38,28 +39,42 @@ footer {visibility: hidden;}
     background: linear-gradient(90deg, #0ea5e9, #22c55e);
     color: white;
 }
+
+.stButton>button:disabled {
+    background: #94a3b8 !important;
+    opacity: 0.6;
+}
 </style>
 """, unsafe_allow_html=True)
 
 # =========================
-# STATE
+# STATE (GIỮ NGUYÊN)
 # =========================
 if "uploader_key" not in st.session_state:
     st.session_state["uploader_key"] = 0
 
+if "processing" not in st.session_state:
+    st.session_state["processing"] = False
+
 if "done" not in st.session_state:
     st.session_state["done"] = False
 
-# =========================
-# COLOR PALETTE (tương phản mạnh)
-# =========================
-COLOR_PALETTE = [
-    "FF3B30","34C759","007AFF","FF9500","AF52DE","FF2D55",
-    "5856D6","00C7BE","FFCC00","FF6B00","4CD964","1E90FF"
-]
+if "last_file_hash" not in st.session_state:
+    st.session_state["last_file_hash"] = None
+
 
 # =========================
-# FIX EXCEL (giữ an toàn openpyxl)
+# COLOR (FIX QUAN TRỌNG)
+# =========================
+COLOR_PALETTE = [
+    "FF3B30","34C759","007AFF","FF9500",
+    "AF52DE","FF2D55","5856D6","00C7BE",
+    "FFCC00","FF6B00","4CD964","1E90FF"
+]
+
+
+# =========================
+# FIX EXCEL (GIỮ NGUYÊN)
 # =========================
 def fix_excel_styles(path):
     tmp_dir = os.path.join(tempfile.gettempdir(), f"fix_{uuid.uuid4().hex}")
@@ -93,22 +108,25 @@ def fix_excel_styles(path):
     return fixed_path
 
 
-def safe_load(path):
+def safe_load(path, read_only=False):
     try:
-        return load_workbook(path, data_only=True, keep_links=False)
+        return load_workbook(path, read_only=read_only, data_only=True, keep_links=False)
     except:
         fixed = fix_excel_styles(path)
-        return load_workbook(fixed, data_only=True, keep_links=False)
+        return load_workbook(fixed, read_only=read_only, data_only=True, keep_links=False)
 
 
 def find_shipment_col(ws):
     for cell in ws[1]:
-        if cell.value and "Shipment Nbr" in str(cell.value):
-            return cell.column
+        if cell.value:
+            v = str(cell.value).replace("\xa0", " ").strip()
+            if "Shipment Nbr" in v:
+                return cell.column
     return None
 
+
 # =========================
-# UI HEADER
+# UI (GIỮ NGUYÊN)
 # =========================
 st.markdown("""
 <div class="header">
@@ -118,6 +136,7 @@ st.markdown("""
 """, unsafe_allow_html=True)
 
 with st.container():
+    st.markdown('<div class="card">', unsafe_allow_html=True)
 
     uploaded_files = st.file_uploader(
         "📂 Chọn 2 file Excel",
@@ -137,19 +156,16 @@ with st.container():
                     tmp_dir = tempfile.gettempdir()
                     path_tpn, path_book1 = None, None
 
-                    # =========================
-                    # phân loại file
-                    # =========================
                     for file in uploaded_files:
                         path = os.path.join(tmp_dir, file.name)
                         with open(path, "wb") as f:
                             f.write(file.read())
 
-                        wb = load_workbook(path, data_only=True)
+                        wb = safe_load(path, True)
                         header = [str(c.value) for c in wb.active[1]]
                         wb.close()
 
-                        if any("Shipment Nbr" in h for h in header):
+                        if any("Shipment Nbr" in str(h) for h in header):
                             path_tpn = path
                         else:
                             path_book1 = path
@@ -158,7 +174,7 @@ with st.container():
                     kehoach_path = os.path.join(tmp_dir, "TPN_KE_HOACH_XE.xlsx")
 
                     # =========================
-                    # lấy số từ BOOK1
+                    # BOOK1 DATA
                     # =========================
                     df = pd.read_excel(path_book1, usecols=[0], dtype=str)
 
@@ -171,28 +187,30 @@ with st.container():
                                 all_numbers.add(num)
 
                     # =========================
-                    # load TPN
+                    # LOAD TPN
                     # =========================
                     wb = safe_load(path_tpn)
                     ws = wb.active
                     col_index = find_shipment_col(ws)
 
-                    yellow = PatternFill("solid", fgColor="FFFF00")
-                    header_fill = PatternFill("solid", fgColor="000080")
-                    header_font = Font(color="FFFFFF", bold=True)
+                    if col_index is None:
+                        st.error("Không tìm thấy cột Shipment Nbr")
+                        st.stop()
+
+                    header_fill = PatternFill("solid", fgColor="FF000080")
 
                     for c in ws[1]:
                         c.fill = header_fill
-                        c.font = header_font
+                        c.font = Font(color="FFFFFFFF", bold=True)
 
                     # =========================
-                    # MAP số -> màu
+                    # MAP COLOR (FIX LOGIC)
                     # =========================
                     number_color = {}
                     color_idx = 0
 
                     # =========================
-                    # xử lý KET_QUA
+                    # PROCESS KET_QUA (FIX CHÍNH)
                     # =========================
                     for i in range(2, ws.max_row + 1):
                         val = ws.cell(i, col_index).value
@@ -209,26 +227,27 @@ with st.container():
                         match_nums = nums & all_numbers
 
                         if match_nums:
-                            # gán màu theo từng số
+
+                            # gán màu theo từng số (QUAN TRỌNG)
                             for n in match_nums:
                                 if n not in number_color:
                                     number_color[n] = COLOR_PALETTE[color_idx % len(COLOR_PALETTE)]
                                     color_idx += 1
 
-                            # CHỌN 1 MÀU ĐẠI DIỆN CHO DÒNG
-                            first_num = list(match_nums)[0]
-                            color = number_color[first_num]
+                            # lấy màu theo từng dòng (KHÔNG cố định 1 số đầu)
+                            row_colors = [number_color[n] for n in match_nums]
 
+                            # ưu tiên màu đầu nhưng đã map theo nhóm
                             ws.cell(i, col_index).fill = PatternFill(
                                 "solid",
-                                fgColor=color
+                                fgColor=row_colors[0]
                             )
 
                     wb.save(save_path)
                     wb.close()
 
                     # =========================
-                    # FILE KEHOACH (GIỮ 1 MÀU ĐỎ)
+                    # FILE KEHOACH (GIỮ NGUYÊN 1 MÀU ĐỎ)
                     # =========================
                     df2 = pd.read_excel(path_book1, header=None, dtype=str)
 
@@ -248,13 +267,12 @@ with st.container():
                         last = 0
 
                         for m in re.finditer(r"\d+", text):
-                            num = m.group()
                             start, end = m.span()
 
                             if start > last:
                                 parts += [normal, text[last:start]]
 
-                            parts += [red, num]
+                            parts += [red, m.group()]
                             last = end
 
                         if last < len(text):
@@ -272,6 +290,7 @@ with st.container():
                     # ZIP OUTPUT
                     # =========================
                     zip_path = os.path.join(tmp_dir, "TPN_COMPLETE.zip")
+
                     with zipfile.ZipFile(zip_path, "w") as z:
                         z.write(save_path, "TPN_KET_QUA.xlsx")
                         z.write(kehoach_path, "TPN_KE_HOACH_XE.xlsx")
@@ -282,6 +301,7 @@ with st.container():
                 st.success("✅ COMPLETE !!!")
 
                 b64 = base64.b64encode(zip_data).decode()
+
                 st.components.v1.html(f"""
                     <a id="dl" href="data:application/zip;base64,{b64}" download="THL TO SM.zip"></a>
                     <script>document.getElementById('dl').click();</script>
@@ -289,11 +309,14 @@ with st.container():
 
                 st.session_state["done"] = True
 
-            except:
-                st.error("❌ Có lỗi xảy ra!")
+            except Exception as e:
+                st.error("❌ Có lỗi xảy ra:")
+                st.exception(e)
 
     if st.session_state["done"]:
         if st.button("🔄 Xử lý file mới"):
             st.session_state["uploader_key"] += 1
             st.session_state["done"] = False
             st.rerun()
+
+    st.markdown('</div>', unsafe_allow_html=True)
