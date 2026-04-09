@@ -8,6 +8,7 @@ import shutil
 import uuid
 import xlsxwriter
 import base64
+import colorsys
 
 from openpyxl import load_workbook
 from openpyxl.styles import PatternFill, Font
@@ -49,6 +50,24 @@ if "uploader_key" not in st.session_state:
 
 if "done" not in st.session_state:
     st.session_state["done"] = False
+
+# =========================
+# COLOR GENERATOR (PASTEL + KHÔNG TRÙNG)
+# =========================
+def generate_pastel_colors(n):
+    colors = []
+    golden_ratio = 0.618033988749895
+
+    for i in range(n):
+        h = (i * golden_ratio) % 1
+        s = 0.35
+        v = 0.95
+
+        r, g, b = colorsys.hsv_to_rgb(h, s, v)
+        hex_color = '%02X%02X%02X' % (int(r*255), int(g*255), int(b*255))
+        colors.append(hex_color)
+
+    return colors
 
 # =========================
 # FIX EXCEL
@@ -100,27 +119,6 @@ def find_shipment_col(ws):
             if "Shipment Nbr" in v:
                 return cell.column
     return None
-
-
-# 🎨 PASTEL COLORS (nhạt + khác nhau rõ)
-PASTEL_COLORS = [
-    "FFCDD2",  # đỏ nhạt
-    "F8BBD0",  # hồng nhạt
-    "E1BEE7",  # tím nhạt
-    "D1C4E9",
-    "C5CAE9",
-    "BBDEFB",
-    "B3E5FC",
-    "B2EBF2",
-    "B2DFDB",
-    "C8E6C9",
-    "DCEDC8",
-    "F0F4C3",
-    "FFF9C4",
-    "FFECB3",
-    "FFE0B2",
-    "FFCCBC"
-]
 
 # =========================
 # UI
@@ -203,11 +201,12 @@ with st.container():
                                 if len(num) == 4:
                                     ketqua_numbers.add(num)
 
-                    # ====== tạo màu pastel ======
-                    group_colors = {}
-                    for i in range(len(group_list)):
-                        color = PASTEL_COLORS[i % len(PASTEL_COLORS)]
-                        group_colors[i] = PatternFill("solid", fgColor=color)
+                    # ====== màu ======
+                    pastel_colors = generate_pastel_colors(len(group_list))
+                    group_colors = {
+                        i: PatternFill("solid", fgColor=pastel_colors[i])
+                        for i in range(len(group_list))
+                    }
 
                     # ====== tô TPN ======
                     header_fill = PatternFill("solid", fgColor="000080")
@@ -284,6 +283,20 @@ with st.container():
                             worksheet.write(r, 0, text)
 
                     worksheet.set_column(0, 0, col_width + 3)
+
+                    # ====== LEGEND ======
+                    legend = workbook.add_worksheet("LEGEND")
+
+                    legend.write(0, 0, "Group")
+                    legend.write(0, 1, "Numbers")
+
+                    for i, g in enumerate(group_list):
+                        fmt = workbook.add_format({'bg_color': pastel_colors[i]})
+                        legend.write(i+1, 0, f"Group {i+1}", fmt)
+                        legend.write(i+1, 1, ", ".join(sorted(g)))
+
+                    legend.set_column(0, 0, 15)
+                    legend.set_column(1, 1, 50)
 
                     workbook.close()
 
