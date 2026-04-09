@@ -9,6 +9,7 @@ import uuid
 import xlsxwriter
 import base64
 import colorsys
+import math
 
 from openpyxl import load_workbook
 from openpyxl.styles import PatternFill, Font
@@ -17,63 +18,43 @@ from openpyxl.worksheet.views import Selection
 st.set_page_config(page_title="THL TO SM", layout="centered")
 
 # =========================
-# CSS
+# COLOR ENGINE (ANTI-SIMILAR)
 # =========================
-st.markdown("""
-<style>
-header {display: none !important;}
-#MainMenu {visibility: hidden;}
-footer {visibility: hidden;}
-.block-container {padding-top: 0rem !important;}
+def color_distance(c1, c2):
+    return math.sqrt(sum((a - b) ** 2 for a, b in zip(c1, c2)))
 
-.header {text-align: center; padding: 8px 0;}
-.header h1 {color: #0284c7; margin: 0;}
-.header p {color: #64748b; margin: 0;}
-
-.card {background: white; padding: 20px; border-radius: 12px;}
-
-.stButton>button {
-    width: 100%;
-    height: 42px;
-    border-radius: 10px;
-    background: linear-gradient(90deg, #0ea5e9, #22c55e);
-    color: white;
-}
-</style>
-""", unsafe_allow_html=True)
-
-# =========================
-# STATE
-# =========================
-if "uploader_key" not in st.session_state:
-    st.session_state["uploader_key"] = 0
-
-if "done" not in st.session_state:
-    st.session_state["done"] = False
-
-# =========================
-# COLOR (DISTINCT PASTEL)
-# =========================
-PASTEL_STRONG_DISTINCT = [
-    "FFD6D6","FFE0EB","EBD6FF","D6E4FF","D6F5FF","D6FFF5",
-    "D6FFD6","F0FFD6","FFF5D6","FFEBD6","FFDCD6","F5D6FF"
-]
-
-def generate_distinct_colors(n):
+def generate_distinct_pastel(n):
     colors = []
-    base = PASTEL_STRONG_DISTINCT.copy()
+    rgb_colors = []
 
-    extra_needed = max(0, n - len(base))
+    i = 0
+    while len(colors) < n:
+        h = (i * 0.137) % 1
+        s = 0.28
+        l = 0.88
 
-    for i in range(extra_needed):
-        h = (i * 0.17) % 1
-        s = 0.25
-        v = 0.95
-        r, g, b = colorsys.hsv_to_rgb(h, s, v)
-        hex_color = '%02X%02X%02X' % (int(r*255), int(g*255), int(b*255))
-        colors.append(hex_color)
+        r, g, b = colorsys.hls_to_rgb(h, l, s)
+        rgb = (int(r*255), int(g*255), int(b*255))
 
-    return base + colors
+        # check khoảng cách với các màu cũ
+        ok = True
+        for old in rgb_colors:
+            if color_distance(rgb, old) < 80:  # 👈 chỉnh độ xa tại đây
+                ok = False
+                break
+
+        if ok:
+            rgb_colors.append(rgb)
+            hex_color = '%02X%02X%02X' % rgb
+            colors.append(hex_color)
+
+        i += 1
+
+        # fallback tránh loop vô hạn
+        if i > 5000:
+            break
+
+    return colors
 
 # =========================
 # FIX EXCEL
@@ -141,12 +122,10 @@ with st.container():
         "📂 Chọn 2 file Excel",
         type=["xlsx"],
         accept_multiple_files=True,
-        key=f"uploader_{st.session_state['uploader_key']}"
+        key=f"uploader_{st.session_state.get('uploader_key',0)}"
     )
 
-    ready = uploaded_files and len(uploaded_files) == 2
-
-    if ready and not st.session_state["done"]:
+    if uploaded_files and len(uploaded_files) == 2:
         if st.button("🚀 Bắt đầu xử lý"):
 
             try:
@@ -188,6 +167,9 @@ with st.container():
                         if nums:
                             group_list.append(nums)
 
+                    # 🎨 tạo màu KHÔNG GIỐNG NHAU
+                    pastel_colors = generate_distinct_pastel(len(group_list))
+
                     wb = safe_load(path_tpn)
                     ws = wb.active
                     col_index = find_shipment_col(ws)
@@ -203,27 +185,12 @@ with st.container():
                                 if len(num) == 4:
                                     ketqua_numbers.add(num)
 
-                    pastel_colors = generate_distinct_colors(len(group_list))
                     group_colors = {
                         i: PatternFill("solid", fgColor=pastel_colors[i])
                         for i in range(len(group_list))
                     }
 
-                    header_fill = PatternFill("solid", fgColor="000080")
-                    header_font = Font(color="FFFFFF", bold=True)
-                    bold_font = Font(bold=True)
-
-                    for cell in ws[1]:
-                        cell.fill = header_fill
-                        cell.font = header_font
-
-                    for row in ws.iter_rows(min_row=2):
-                        for cell in row:
-                            if cell.value:
-                                cell.font = bold_font
-
-                    count = 0
-
+                    # ====== TÔ TPN ======
                     for i in range(2, ws.max_row + 1):
                         val = ws.cell(i, col_index).value
                         if val:
@@ -238,15 +205,12 @@ with st.container():
                             for idx, g in enumerate(group_list):
                                 if nums & g:
                                     ws.cell(i, col_index).fill = group_colors[idx]
-                                    count += 1
                                     break
-
-                    ws.sheet_view.selection = [Selection(activeCell="A1", sqref="A1")]
-                    ws.sheet_view.topLeftCell = "A1"
 
                     wb.save(save_path)
                     wb.close()
 
+                    # ====== KẾ HOẠCH ======
                     workbook = xlsxwriter.Workbook(kehoach_path)
                     worksheet = workbook.add_worksheet()
 
@@ -283,21 +247,9 @@ with st.container():
 
                     worksheet.set_column(0, 0, col_width + 3)
 
-                    legend = workbook.add_worksheet("LEGEND")
-
-                    legend.write(0, 0, "Group")
-                    legend.write(0, 1, "Numbers")
-
-                    for i, g in enumerate(group_list):
-                        fmt = workbook.add_format({'bg_color': pastel_colors[i]})
-                        legend.write(i+1, 0, f"Group {i+1}", fmt)
-                        legend.write(i+1, 1, ", ".join(sorted(g)))
-
-                    legend.set_column(0, 0, 15)
-                    legend.set_column(1, 1, 50)
-
                     workbook.close()
 
+                    # zip
                     zip_path = os.path.join(tmp_dir, "TPN_COMPLETE.zip")
                     with zipfile.ZipFile(zip_path, "w") as z:
                         z.write(save_path, "TPN_KET_QUA.xlsx")
@@ -306,7 +258,7 @@ with st.container():
                     with open(zip_path, "rb") as f:
                         zip_data = f.read()
 
-                st.success(f"✅ COMPLETE !!! Matched: {count}")
+                st.success("✅ COMPLETE !!!")
 
                 b64 = base64.b64encode(zip_data).decode()
                 st.components.v1.html(f"""
@@ -314,15 +266,5 @@ with st.container():
                     <script>document.getElementById('dl').click();</script>
                 """, height=0)
 
-                st.session_state["done"] = True
-
             except Exception as e:
                 st.error(f"❌ Lỗi: {e}")
-
-    if st.session_state["done"]:
-        if st.button("🔄 Xử lý file mới"):
-            st.session_state["uploader_key"] += 1
-            st.session_state["done"] = False
-            st.rerun()
-
-    st.markdown('</div>', unsafe_allow_html=True)
