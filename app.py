@@ -52,22 +52,28 @@ if "done" not in st.session_state:
     st.session_state["done"] = False
 
 # =========================
-# COLOR GENERATOR (PASTEL + KHÔNG TRÙNG)
+# COLOR (DISTINCT PASTEL)
 # =========================
-def generate_pastel_colors(n):
+PASTEL_STRONG_DISTINCT = [
+    "FFD6D6","FFE0EB","EBD6FF","D6E4FF","D6F5FF","D6FFF5",
+    "D6FFD6","F0FFD6","FFF5D6","FFEBD6","FFDCD6","F5D6FF"
+]
+
+def generate_distinct_colors(n):
     colors = []
-    golden_ratio = 0.618033988749895
+    base = PASTEL_STRONG_DISTINCT.copy()
 
-    for i in range(n):
-        h = (i * golden_ratio) % 1
-        s = 0.35
+    extra_needed = max(0, n - len(base))
+
+    for i in range(extra_needed):
+        h = (i * 0.17) % 1
+        s = 0.25
         v = 0.95
-
         r, g, b = colorsys.hsv_to_rgb(h, s, v)
         hex_color = '%02X%02X%02X' % (int(r*255), int(g*255), int(b*255))
         colors.append(hex_color)
 
-    return colors
+    return base + colors
 
 # =========================
 # FIX EXCEL
@@ -103,14 +109,12 @@ def fix_excel_styles(path):
 
     return fixed_path
 
-
 def safe_load(path, read_only=False):
     try:
         return load_workbook(path, read_only=read_only, data_only=True, keep_links=False)
     except:
         fixed = fix_excel_styles(path)
         return load_workbook(fixed, read_only=read_only, data_only=True, keep_links=False)
-
 
 def find_shipment_col(ws):
     for cell in ws[1]:
@@ -168,7 +172,6 @@ with st.container():
                     save_path = os.path.join(tmp_dir, "TPN_KET_QUA.xlsx")
                     kehoach_path = os.path.join(tmp_dir, "TPN_KE_HOACH_XE.xlsx")
 
-                    # ====== đọc kế hoạch ======
                     df2 = pd.read_excel(path_book1, header=None, dtype=str)
 
                     group_list = []
@@ -185,7 +188,6 @@ with st.container():
                         if nums:
                             group_list.append(nums)
 
-                    # ====== đọc TPN ======
                     wb = safe_load(path_tpn)
                     ws = wb.active
                     col_index = find_shipment_col(ws)
@@ -201,14 +203,12 @@ with st.container():
                                 if len(num) == 4:
                                     ketqua_numbers.add(num)
 
-                    # ====== màu ======
-                    pastel_colors = generate_pastel_colors(len(group_list))
+                    pastel_colors = generate_distinct_colors(len(group_list))
                     group_colors = {
                         i: PatternFill("solid", fgColor=pastel_colors[i])
                         for i in range(len(group_list))
                     }
 
-                    # ====== tô TPN ======
                     header_fill = PatternFill("solid", fgColor="000080")
                     header_font = Font(color="FFFFFF", bold=True)
                     bold_font = Font(bold=True)
@@ -247,7 +247,6 @@ with st.container():
                     wb.save(save_path)
                     wb.close()
 
-                    # ====== file kế hoạch ======
                     workbook = xlsxwriter.Workbook(kehoach_path)
                     worksheet = workbook.add_worksheet()
 
@@ -284,7 +283,6 @@ with st.container():
 
                     worksheet.set_column(0, 0, col_width + 3)
 
-                    # ====== LEGEND ======
                     legend = workbook.add_worksheet("LEGEND")
 
                     legend.write(0, 0, "Group")
@@ -300,7 +298,6 @@ with st.container():
 
                     workbook.close()
 
-                    # zip
                     zip_path = os.path.join(tmp_dir, "TPN_COMPLETE.zip")
                     with zipfile.ZipFile(zip_path, "w") as z:
                         z.write(save_path, "TPN_KET_QUA.xlsx")
