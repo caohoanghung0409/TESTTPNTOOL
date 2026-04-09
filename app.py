@@ -52,7 +52,7 @@ if "done" not in st.session_state:
     st.session_state["done"] = False
 
 # =========================
-# COLOR (DISTINCT PASTEL)
+# COLOR
 # =========================
 PASTEL_STRONG_DISTINCT = [
     "FFD6D6","FFE0EB","EBD6FF","D6E4FF","D6F5FF","D6FFF5",
@@ -247,6 +247,9 @@ with st.container():
                     wb.save(save_path)
                     wb.close()
 
+                    # =========================
+                    # KE HOACH (ĐÃ BỎ LEGEND)
+                    # =========================
                     workbook = xlsxwriter.Workbook(kehoach_path)
                     worksheet = workbook.add_worksheet()
 
@@ -282,19 +285,6 @@ with st.container():
                             worksheet.write(r, 0, text)
 
                     worksheet.set_column(0, 0, col_width + 3)
-
-                    legend = workbook.add_worksheet("LEGEND")
-
-                    legend.write(0, 0, "Group")
-                    legend.write(0, 1, "Numbers")
-
-                    for i, g in enumerate(group_list):
-                        fmt = workbook.add_format({'bg_color': pastel_colors[i]})
-                        legend.write(i+1, 0, f"Group {i+1}", fmt)
-                        legend.write(i+1, 1, ", ".join(sorted(g)))
-
-                    legend.set_column(0, 0, 15)
-                    legend.set_column(1, 1, 50)
 
                     workbook.close()
 
