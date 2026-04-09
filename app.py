@@ -8,7 +8,6 @@ import shutil
 import uuid
 import xlsxwriter
 import base64
-import random
 
 from openpyxl import load_workbook
 from openpyxl.styles import PatternFill, Font
@@ -38,11 +37,6 @@ footer {visibility: hidden;}
     border-radius: 10px;
     background: linear-gradient(90deg, #0ea5e9, #22c55e);
     color: white;
-}
-
-.stButton>button:disabled {
-    background: #94a3b8 !important;
-    opacity: 0.6;
 }
 </style>
 """, unsafe_allow_html=True)
@@ -108,9 +102,25 @@ def find_shipment_col(ws):
     return None
 
 
-def random_color():
-    return ''.join([random.choice('89ABCDEF') for _ in range(6)])
-
+# 🎨 PASTEL COLORS (nhạt + khác nhau rõ)
+PASTEL_COLORS = [
+    "FFCDD2",  # đỏ nhạt
+    "F8BBD0",  # hồng nhạt
+    "E1BEE7",  # tím nhạt
+    "D1C4E9",
+    "C5CAE9",
+    "BBDEFB",
+    "B3E5FC",
+    "B2EBF2",
+    "B2DFDB",
+    "C8E6C9",
+    "DCEDC8",
+    "F0F4C3",
+    "FFF9C4",
+    "FFECB3",
+    "FFE0B2",
+    "FFCCBC"
+]
 
 # =========================
 # UI
@@ -193,17 +203,11 @@ with st.container():
                                 if len(num) == 4:
                                     ketqua_numbers.add(num)
 
-                    # ====== tạo màu ======
+                    # ====== tạo màu pastel ======
                     group_colors = {}
-                    used_colors = set()
-
-                    for i, g in enumerate(group_list):
-                        while True:
-                            c = random_color()
-                            if c not in used_colors:
-                                used_colors.add(c)
-                                break
-                        group_colors[i] = PatternFill("solid", fgColor=c)
+                    for i in range(len(group_list)):
+                        color = PASTEL_COLORS[i % len(PASTEL_COLORS)]
+                        group_colors[i] = PatternFill("solid", fgColor=color)
 
                     # ====== tô TPN ======
                     header_fill = PatternFill("solid", fgColor="000080")
@@ -244,7 +248,7 @@ with st.container():
                     wb.save(save_path)
                     wb.close()
 
-                    # ====== file kế hoạch + AUTO WIDTH ======
+                    # ====== file kế hoạch ======
                     workbook = xlsxwriter.Workbook(kehoach_path)
                     worksheet = workbook.add_worksheet()
 
@@ -255,8 +259,7 @@ with st.container():
 
                     for r, row in df2.iterrows():
                         text = "" if pd.isna(row.iloc[0]) else str(row.iloc[0])
-
-                        col_width = max(col_width, len(text))  # 👈 tính width
+                        col_width = max(col_width, len(text))
 
                         parts = []
                         last = 0
@@ -280,7 +283,7 @@ with st.container():
                         except:
                             worksheet.write(r, 0, text)
 
-                    worksheet.set_column(0, 0, col_width + 3)  # 👈 AUTO WIDTH
+                    worksheet.set_column(0, 0, col_width + 3)
 
                     workbook.close()
 
