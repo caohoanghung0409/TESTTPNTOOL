@@ -177,7 +177,23 @@ with st.container():
                         if nums:
                             group_list.append(nums)
 
-                    # tạo màu cho từng group
+                    # ====== đọc TPN trước để lấy ketqua_numbers ======
+                    wb = safe_load(path_tpn)
+                    ws = wb.active
+                    col_index = find_shipment_col(ws)
+
+                    ketqua_numbers = set()
+
+                    for i in range(2, ws.max_row + 1):
+                        val = ws.cell(i, col_index).value
+                        if val:
+                            for num in re.findall(r"\d+", str(val)):
+                                if len(num) == 3:
+                                    num = "0" + num
+                                if len(num) == 4:
+                                    ketqua_numbers.add(num)
+
+                    # ====== tạo màu group ======
                     group_colors = {}
                     used_colors = set()
 
@@ -189,11 +205,7 @@ with st.container():
                                 break
                         group_colors[i] = PatternFill("solid", fgColor=c)
 
-                    # ====== xử lý TPN ======
-                    wb = safe_load(path_tpn)
-                    ws = wb.active
-                    col_index = find_shipment_col(ws)
-
+                    # ====== tô màu TPN ======
                     header_fill = PatternFill("solid", fgColor="000080")
                     header_font = Font(color="FFFFFF", bold=True)
                     bold_font = Font(bold=True)
@@ -232,7 +244,7 @@ with st.container():
                     wb.save(save_path)
                     wb.close()
 
-                    # ====== file kế hoạch giữ nguyên ======
+                    # ====== file kế hoạch (FIX CHUẨN) ======
                     workbook = xlsxwriter.Workbook(kehoach_path)
                     worksheet = workbook.add_worksheet()
 
@@ -248,11 +260,12 @@ with st.container():
                         for m in re.finditer(r"\d+", text):
                             num = m.group()
                             start, end = m.span()
+                            check = "0"+num if len(num)==3 else num
 
                             if start > last:
                                 parts += [normal, text[last:start]]
 
-                            parts += [red, num]
+                            parts += [red if check in ketqua_numbers else normal, num]
                             last = end
 
                         if last < len(text):
