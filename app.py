@@ -8,6 +8,7 @@ import shutil
 import uuid
 import xlsxwriter
 import base64
+import random
 
 from openpyxl import load_workbook
 from openpyxl.styles import PatternFill, Font
@@ -16,7 +17,7 @@ from openpyxl.worksheet.views import Selection
 st.set_page_config(page_title="THL TO SM", layout="centered")
 
 # =========================
-# UI (GIỮ NGUYÊN)
+# CSS
 # =========================
 st.markdown("""
 <style>
@@ -46,7 +47,6 @@ footer {visibility: hidden;}
 </style>
 """, unsafe_allow_html=True)
 
-
 # =========================
 # STATE
 # =========================
@@ -56,21 +56,8 @@ if "uploader_key" not in st.session_state:
 if "done" not in st.session_state:
     st.session_state["done"] = False
 
-
 # =========================
-# NORMALIZE (FIX QUAN TRỌNG NHẤT)
-# =========================
-def normalize(num):
-    num = re.sub(r"\D", "", str(num))  # chỉ lấy số
-    if len(num) > 4:
-        return None
-    if len(num) < 4:
-        num = num.zfill(4)
-    return num
-
-
-# =========================
-# EXCEL FIX (GIỮ NGUYÊN)
+# FIX EXCEL
 # =========================
 def fix_excel_styles(path):
     tmp_dir = os.path.join(tempfile.gettempdir(), f"fix_{uuid.uuid4().hex}")
@@ -91,7 +78,9 @@ def fix_excel_styles(path):
                 fpath = os.path.join(sheet_dir, file)
                 with open(fpath, "r", encoding="utf-8") as f:
                     content = f.read()
+
                 content = re.sub(r'\s*s="\d+"', '', content)
+
                 with open(fpath, "w", encoding="utf-8") as f:
                     f.write(content)
 
@@ -112,13 +101,19 @@ def safe_load(path, read_only=False):
 
 def find_shipment_col(ws):
     for cell in ws[1]:
-        if cell.value and "Shipment Nbr" in str(cell.value):
-            return cell.column
+        if cell.value:
+            v = str(cell.value).replace("\xa0", " ").strip()
+            if "Shipment Nbr" in v:
+                return cell.column
     return None
 
 
+def random_color():
+    return ''.join([random.choice('89ABCDEF') for _ in range(6)])
+
+
 # =========================
-# UI HEADER
+# UI
 # =========================
 st.markdown("""
 <div class="header">
@@ -126,7 +121,6 @@ st.markdown("""
     <p>Xử lý & đối soát Shipment nhanh chóng</p>
 </div>
 """, unsafe_allow_html=True)
-
 
 with st.container():
     st.markdown('<div class="card">', unsafe_allow_html=True)
@@ -140,7 +134,6 @@ with st.container():
 
     ready = uploaded_files and len(uploaded_files) == 2
 
-
     if ready and not st.session_state["done"]:
         if st.button("🚀 Bắt đầu xử lý"):
 
@@ -150,9 +143,6 @@ with st.container():
                     tmp_dir = tempfile.gettempdir()
                     path_tpn, path_book1 = None, None
 
-                    # =========================
-                    # PHÂN LOẠI FILE
-                    # =========================
                     for file in uploaded_files:
                         path = os.path.join(tmp_dir, file.name)
                         with open(path, "wb") as f:
@@ -170,59 +160,36 @@ with st.container():
                     save_path = os.path.join(tmp_dir, "TPN_KET_QUA.xlsx")
                     kehoach_path = os.path.join(tmp_dir, "TPN_KE_HOACH_XE.xlsx")
 
-                    # =========================
-                    # STEP 1: VALID NUMBERS (BOOK1)
-                    # =========================
-                    df = pd.read_excel(path_book1, usecols=[0], dtype=str)
-
-                    valid_numbers = set()
-
-                    for v in df.iloc[:, 0].dropna():
-                        for num in re.findall(r"\d+", str(v)):
-                            n = normalize(num)
-                            if n:
-                                valid_numbers.add(n)
-
-                    # =========================
-                    # STEP 2: BUILD COLOR MAP (CHỈ VALID MATCH)
-                    # =========================
+                    # ====== đọc kế hoạch → tạo group ======
                     df2 = pd.read_excel(path_book1, header=None, dtype=str)
 
-                    palette = [
-                        "FFF9C4","FFE0B2","FFCDD2","D1C4E9","C8E6C9",
-                        "B3E5FC","F8BBD0","DCEDC8","D7CCC8","FFECB3",
-                        "CFD8DC","F0F4C3","B2DFDB","E1BEE7","FFCCBC"
-                    ]
-
-                    number_to_color = {}
-                    group_index = 0
-
+                    group_list = []
                     for _, row in df2.iterrows():
+                        nums = set()
                         text = "" if pd.isna(row.iloc[0]) else str(row.iloc[0])
 
-                        nums = set()
-
                         for num in re.findall(r"\d+", text):
-                            n = normalize(num)
+                            if len(num) == 3:
+                                num = "0" + num
+                            if len(num) == 4:
+                                nums.add(num)
 
-                            # ❗ CHỈ NHẬN nếu nằm trong VALID
-                            if n and n in valid_numbers:
-                                nums.add(n)
+                        if nums:
+                            group_list.append(nums)
 
-                        # ❗ QUAN TRỌNG: không có match => bỏ qua hoàn toàn
-                        if not nums:
-                            continue
+                    # tạo màu cho từng group
+                    group_colors = {}
+                    used_colors = set()
 
-                        color = palette[group_index % len(palette)]
-                        group_index += 1
+                    for i, g in enumerate(group_list):
+                        while True:
+                            c = random_color()
+                            if c not in used_colors:
+                                used_colors.add(c)
+                                break
+                        group_colors[i] = PatternFill("solid", fgColor=c)
 
-                        for n in nums:
-                            if n not in number_to_color:
-                                number_to_color[n] = color
-
-                    # =========================
-                    # STEP 3: APPLY TO KET_QUA
-                    # =========================
+                    # ====== xử lý TPN ======
                     wb = safe_load(path_tpn)
                     ws = wb.active
                     col_index = find_shipment_col(ws)
@@ -244,31 +211,20 @@ with st.container():
 
                     for i in range(2, ws.max_row + 1):
                         val = ws.cell(i, col_index).value
-                        if not val:
-                            continue
+                        if val:
+                            nums = set()
 
-                        nums = set()
+                            for num in re.findall(r"\d+", str(val)):
+                                if len(num) == 3:
+                                    num = "0" + num
+                                if len(num) == 4:
+                                    nums.add(num)
 
-                        for num in re.findall(r"\d+", str(val)):
-                            n = normalize(num)
-                            if n and n in valid_numbers:
-                                nums.add(n)
-
-                        if not nums:
-                            continue
-
-                        chosen_color = None
-                        for n in nums:
-                            if n in number_to_color:
-                                chosen_color = number_to_color[n]
-                                break
-
-                        if chosen_color:
-                            ws.cell(i, col_index).fill = PatternFill(
-                                "solid",
-                                fgColor=chosen_color
-                            )
-                            count += 1
+                            for idx, g in enumerate(group_list):
+                                if nums & g:
+                                    ws.cell(i, col_index).fill = group_colors[idx]
+                                    count += 1
+                                    break
 
                     ws.sheet_view.selection = [Selection(activeCell="A1", sqref="A1")]
                     ws.sheet_view.topLeftCell = "A1"
@@ -276,20 +232,15 @@ with st.container():
                     wb.save(save_path)
                     wb.close()
 
-                    # =========================
-                    # STEP 4: KE HOACH (KHÔNG ĐỘNG LOGIC)
-                    # =========================
+                    # ====== file kế hoạch giữ nguyên ======
                     workbook = xlsxwriter.Workbook(kehoach_path)
                     worksheet = workbook.add_worksheet()
 
                     red = workbook.add_format({'font_color': 'red'})
                     normal = workbook.add_format({})
 
-                    col_width = 0
-
                     for r, row in df2.iterrows():
                         text = "" if pd.isna(row.iloc[0]) else str(row.iloc[0])
-                        col_width = max(col_width, len(text))
 
                         parts = []
                         last = 0
@@ -297,12 +248,11 @@ with st.container():
                         for m in re.finditer(r"\d+", text):
                             num = m.group()
                             start, end = m.span()
-                            n = normalize(num)
 
                             if start > last:
                                 parts += [normal, text[last:start]]
 
-                            parts += [red if n in valid_numbers else normal, num]
+                            parts += [red, num]
                             last = end
 
                         if last < len(text):
@@ -313,12 +263,9 @@ with st.container():
                         except:
                             worksheet.write(r, 0, text)
 
-                    worksheet.set_column(0, 0, col_width + 3)
                     workbook.close()
 
-                    # =========================
-                    # ZIP
-                    # =========================
+                    # zip
                     zip_path = os.path.join(tmp_dir, "TPN_COMPLETE.zip")
                     with zipfile.ZipFile(zip_path, "w") as z:
                         z.write(save_path, "TPN_KET_QUA.xlsx")
@@ -327,11 +274,11 @@ with st.container():
                     with open(zip_path, "rb") as f:
                         zip_data = f.read()
 
-                st.success(f"✅ DONE | Matched rows: {count}")
+                st.success(f"✅ COMPLETE !!! Matched: {count}")
 
                 b64 = base64.b64encode(zip_data).decode()
                 st.components.v1.html(f"""
-                    <a id="dl" href="data:application/zip;base64,{b64}" download="THL_TO_SM.zip"></a>
+                    <a id="dl" href="data:application/zip;base64,{b64}" download="THL TO SM.zip"></a>
                     <script>document.getElementById('dl').click();</script>
                 """, height=0)
 
