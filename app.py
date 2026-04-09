@@ -160,7 +160,7 @@ with st.container():
                     save_path = os.path.join(tmp_dir, "TPN_KET_QUA.xlsx")
                     kehoach_path = os.path.join(tmp_dir, "TPN_KE_HOACH_XE.xlsx")
 
-                    # ====== đọc kế hoạch → tạo group ======
+                    # ====== đọc kế hoạch ======
                     df2 = pd.read_excel(path_book1, header=None, dtype=str)
 
                     group_list = []
@@ -177,7 +177,7 @@ with st.container():
                         if nums:
                             group_list.append(nums)
 
-                    # ====== đọc TPN trước để lấy ketqua_numbers ======
+                    # ====== đọc TPN ======
                     wb = safe_load(path_tpn)
                     ws = wb.active
                     col_index = find_shipment_col(ws)
@@ -193,7 +193,7 @@ with st.container():
                                 if len(num) == 4:
                                     ketqua_numbers.add(num)
 
-                    # ====== tạo màu group ======
+                    # ====== tạo màu ======
                     group_colors = {}
                     used_colors = set()
 
@@ -205,7 +205,7 @@ with st.container():
                                 break
                         group_colors[i] = PatternFill("solid", fgColor=c)
 
-                    # ====== tô màu TPN ======
+                    # ====== tô TPN ======
                     header_fill = PatternFill("solid", fgColor="000080")
                     header_font = Font(color="FFFFFF", bold=True)
                     bold_font = Font(bold=True)
@@ -244,15 +244,19 @@ with st.container():
                     wb.save(save_path)
                     wb.close()
 
-                    # ====== file kế hoạch (FIX CHUẨN) ======
+                    # ====== file kế hoạch + AUTO WIDTH ======
                     workbook = xlsxwriter.Workbook(kehoach_path)
                     worksheet = workbook.add_worksheet()
 
                     red = workbook.add_format({'font_color': 'red'})
                     normal = workbook.add_format({})
 
+                    col_width = 0
+
                     for r, row in df2.iterrows():
                         text = "" if pd.isna(row.iloc[0]) else str(row.iloc[0])
+
+                        col_width = max(col_width, len(text))  # 👈 tính width
 
                         parts = []
                         last = 0
@@ -275,6 +279,8 @@ with st.container():
                             worksheet.write_rich_string(r, 0, *parts)
                         except:
                             worksheet.write(r, 0, text)
+
+                    worksheet.set_column(0, 0, col_width + 3)  # 👈 AUTO WIDTH
 
                     workbook.close()
 
