@@ -4,20 +4,19 @@ import re
 import tempfile
 import os
 import zipfile
-import shutil
-import uuid
 import xlsxwriter
 import base64
 import colorsys
 
-from openpyxl import load_workbook
+from openpyxl import load_workbook, Workbook
 from openpyxl.styles import PatternFill, Font
 from openpyxl.worksheet.views import Selection
+from openpyxl.utils.dataframe import dataframe_to_rows
 
 st.set_page_config(page_title="THL TO SM", layout="centered")
 
 # =========================
-# CSS (GIỮ NGUYÊN GIAO DIỆN)
+# CSS (GIỮ NGUYÊN)
 # =========================
 st.markdown("""
 <style>
@@ -75,14 +74,36 @@ def generate_distinct_colors(n):
     return base + colors
 
 # =========================
-# SAFE LOAD
+# SAFE LOAD (FIX TRIỆT ĐỂ ERP FILE BẨN STYLE)
 # =========================
 def safe_load(path, read_only=False):
     try:
-        return load_workbook(path, read_only=read_only, data_only=True, keep_links=False)
-    except:
-        return load_workbook(path, read_only=read_only, data_only=True, keep_links=False)
+        wb = load_workbook(
+            path,
+            read_only=False,
+            data_only=True,
+            keep_links=False
+        )
 
+        _ = wb.active.max_row  # trigger validate
+
+        return wb
+
+    except Exception:
+        # ===== REBUILD CLEAN WORKBOOK =====
+        df = pd.read_excel(path, dtype=str, engine="openpyxl")
+
+        wb = Workbook()
+        ws = wb.active
+
+        for r in dataframe_to_rows(df, index=False, header=True):
+            ws.append(r)
+
+        return wb
+
+# =========================
+# FIND COLUMN
+# =========================
 def find_shipment_col(ws):
     for cell in ws[1]:
         if cell.value and "Shipment Nbr" in str(cell.value):
@@ -100,7 +121,7 @@ st.markdown("""
 """, unsafe_allow_html=True)
 
 # =========================
-# UI CARD (RESTORED)
+# UI
 # =========================
 with st.container():
     st.markdown('<div class="card">', unsafe_allow_html=True)
@@ -170,7 +191,7 @@ with st.container():
                     ketqua_numbers = set()
 
                     # =========================
-                    # FIX: CHỈ LẤY 4 SỐ CUỐI
+                    # GET LAST 4 DIGITS
                     # =========================
                     for i in range(2, ws.max_row + 1):
                         val = ws.cell(i, col_index).value
@@ -205,7 +226,7 @@ with st.container():
                     count = 0
 
                     # =========================
-                    # FIX MATCH COLOR
+                    # FIX MATCH COLOR (SAFE FILL)
                     # =========================
                     for i in range(2, ws.max_row + 1):
                         val = ws.cell(i, col_index).value
@@ -222,7 +243,12 @@ with st.container():
 
                             for idx, g in enumerate(group_list):
                                 if nums & g:
-                                    ws.cell(i, col_index).fill = group_colors[idx]
+                                    cell = ws.cell(i, col_index)
+                                    cell.fill = PatternFill(
+                                        start_color=group_colors[idx].fgColor.rgb,
+                                        end_color=group_colors[idx].fgColor.rgb,
+                                        fill_type="solid"
+                                    )
                                     count += 1
                                     break
 
@@ -233,7 +259,7 @@ with st.container():
                     wb.close()
 
                     # =========================
-                    # KE HOACH
+                    # KE HOACH FILE
                     # =========================
                     workbook = xlsxwriter.Workbook(kehoach_path)
                     worksheet = workbook.add_worksheet()
@@ -273,7 +299,7 @@ with st.container():
                     workbook.close()
 
                     # =========================
-                    # ZIP OUTPUT
+                    # ZIP
                     # =========================
                     zip_path = os.path.join(tmp_dir, "TPN_COMPLETE.zip")
                     with zipfile.ZipFile(zip_path, "w") as z:
