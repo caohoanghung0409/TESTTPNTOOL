@@ -188,20 +188,12 @@ with st.container():
                         if nums:
                             group_list.append(nums)
 
+                    # tất cả số hợp lệ từ kế hoạch
+                    ketqua_numbers = set().union(*group_list)
+
                     wb = safe_load(path_tpn)
                     ws = wb.active
                     col_index = find_shipment_col(ws)
-
-                    ketqua_numbers = set()
-
-                    for i in range(2, ws.max_row + 1):
-                        val = ws.cell(i, col_index).value
-                        if val:
-                            for num in re.findall(r"\d+", str(val)):
-                                if len(num) == 3:
-                                    num = "0" + num
-                                if len(num) == 4:
-                                    ketqua_numbers.add(num)
 
                     pastel_colors = generate_distinct_colors(len(group_list))
                     group_colors = {
@@ -235,8 +227,10 @@ with st.container():
                                 if len(num) == 4:
                                     nums.add(num)
 
+                            # 🔥 FIX CHUẨN Ở ĐÂY
                             for idx, g in enumerate(group_list):
-                                if nums & g:
+                                matched_nums = nums & g & ketqua_numbers
+                                if matched_nums:
                                     ws.cell(i, col_index).fill = group_colors[idx]
                                     count += 1
                                     break
@@ -248,7 +242,7 @@ with st.container():
                     wb.close()
 
                     # =========================
-                    # KE HOACH (ĐÃ BỎ LEGEND)
+                    # KE HOACH
                     # =========================
                     workbook = xlsxwriter.Workbook(kehoach_path)
                     worksheet = workbook.add_worksheet()
@@ -285,7 +279,6 @@ with st.container():
                             worksheet.write(r, 0, text)
 
                     worksheet.set_column(0, 0, col_width + 3)
-
                     workbook.close()
 
                     zip_path = os.path.join(tmp_dir, "TPN_COMPLETE.zip")
