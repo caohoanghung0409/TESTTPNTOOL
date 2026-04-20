@@ -8,7 +8,7 @@ import xlsxwriter
 import base64
 import colorsys
 
-from openpyxl import load_workbook
+from openpyxl import Workbook
 from openpyxl.styles import PatternFill, Font
 from openpyxl.worksheet.views import Selection
 from openpyxl.utils import get_column_letter
@@ -16,7 +16,7 @@ from openpyxl.utils import get_column_letter
 st.set_page_config(page_title="THL TO SM", layout="centered")
 
 # =========================
-# CSS
+# CSS (GIỮ NGUYÊN)
 # =========================
 st.markdown("""
 <style>
@@ -74,7 +74,7 @@ def generate_distinct_colors(n):
     return base + colors
 
 # =========================
-# AUTO COLUMN WIDTH
+# AUTO COLUMN WIDTH FIX
 # =========================
 def auto_adjust_column_width(ws):
     for col in ws.columns:
@@ -163,13 +163,20 @@ with st.container():
                             group_list.append(nums)
 
                     # =========================
-                    # 🔥 LOAD FILE GỐC (GIỮ FORMAT)
+                    # TPN DATA (CLEAN)
                     # =========================
-                    wb = load_workbook(path_tpn)
+                    df_tpn = pd.read_excel(path_tpn, engine="calamine", dtype=str)
+
+                    wb = Workbook()
                     ws = wb.active
 
+                    ws.append(list(df_tpn.columns))
+
+                    for _, r in df_tpn.iterrows():
+                        ws.append(list(r.values))
+
                     # =========================
-                    # FIND COLUMN
+                    # FIND COL
                     # =========================
                     col_index = None
                     for idx, c in enumerate(ws[1], start=1):
@@ -180,7 +187,7 @@ with st.container():
                     ketqua_numbers = set()
 
                     # =========================
-                    # GET LAST 4 DIGITS
+                    # LAST 4 DIGITS
                     # =========================
                     for i in range(2, ws.max_row + 1):
                         val = ws.cell(i, col_index).value
@@ -199,17 +206,25 @@ with st.container():
                     colors = generate_distinct_colors(len(group_list))
                     group_colors = {i: colors[i] for i in range(len(group_list))}
 
-                    # =========================
-                    # HEADER STYLE (GIỮ NGUYÊN FORMAT KHÁC)
-                    # =========================
+                    header_fill = PatternFill("solid", fgColor="000080")
+                    header_font = Font(color="FFFFFF", bold=True)
+                    bold_font = Font(bold=True)
+
+                    # header style
                     for cell in ws[1]:
-                        cell.font = Font(bold=True, color="FFFFFF")
-                        cell.fill = PatternFill("solid", fgColor="000080")
+                        cell.fill = header_fill
+                        cell.font = header_font
+
+                    # bold
+                    for row in ws.iter_rows(min_row=2):
+                        for cell in row:
+                            if cell.value:
+                                cell.font = bold_font
 
                     count = 0
 
                     # =========================
-                    # MATCH + COLOR (KHÔNG PHÁ FORMAT GỐC)
+                    # MATCH + COLOR
                     # =========================
                     for i in range(2, ws.max_row + 1):
                         val = ws.cell(i, col_index).value
@@ -236,7 +251,7 @@ with st.container():
                     ws.sheet_view.selection = [Selection(activeCell="A1", sqref="A1")]
 
                     # =========================
-                    # AUTO WIDTH
+                    # 🔥 AUTO COLUMN WIDTH FIX HERE
                     # =========================
                     auto_adjust_column_width(ws)
 
@@ -244,7 +259,7 @@ with st.container():
                     wb.close()
 
                     # =========================
-                    # KE HOACH FILE (GIỮ NGUYÊN)
+                    # KE HOACH FILE
                     # =========================
                     workbook = xlsxwriter.Workbook(kehoach_path)
                     worksheet = workbook.add_worksheet()
@@ -314,3 +329,5 @@ with st.container():
             st.rerun()
 
     st.markdown('</div>', unsafe_allow_html=True)
+
+code chạy ok nè, nhưng mình muốn TPN_KET_QUA format như file gốc, bạn có làm được kg?
