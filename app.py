@@ -17,7 +17,7 @@ from openpyxl.worksheet.views import Selection
 st.set_page_config(page_title="THL TO SM", layout="centered")
 
 # =========================
-# CSS (GIỮ NGUYÊN)
+# CSS (GIỮ NGUYÊN GIAO DIỆN)
 # =========================
 st.markdown("""
 <style>
@@ -75,7 +75,7 @@ def generate_distinct_colors(n):
     return base + colors
 
 # =========================
-# SAFE LOAD (GIỮ NGUYÊN)
+# SAFE LOAD
 # =========================
 def safe_load(path, read_only=False):
     try:
@@ -90,7 +90,7 @@ def find_shipment_col(ws):
     return None
 
 # =========================
-# UI
+# HEADER
 # =========================
 st.markdown("""
 <div class="header">
@@ -99,186 +99,207 @@ st.markdown("""
 </div>
 """, unsafe_allow_html=True)
 
-uploaded_files = st.file_uploader(
-    "📂 Chọn 2 file Excel",
-    type=["xlsx"],
-    accept_multiple_files=True,
-    key=f"uploader_{st.session_state['uploader_key']}"
-)
+# =========================
+# UI CARD (RESTORED)
+# =========================
+with st.container():
+    st.markdown('<div class="card">', unsafe_allow_html=True)
 
-ready = uploaded_files and len(uploaded_files) == 2
+    uploaded_files = st.file_uploader(
+        "📂 Chọn 2 file Excel",
+        type=["xlsx"],
+        accept_multiple_files=True,
+        key=f"uploader_{st.session_state['uploader_key']}"
+    )
 
-if ready and not st.session_state["done"]:
-    if st.button("🚀 Bắt đầu xử lý"):
+    ready = uploaded_files and len(uploaded_files) == 2
 
-        try:
-            with st.spinner("⏳ Đang xử lý..."):
+    if ready and not st.session_state["done"]:
 
-                tmp_dir = tempfile.gettempdir()
-                path_tpn, path_book1 = None, None
+        if st.button("🚀 Bắt đầu xử lý"):
 
-                for file in uploaded_files:
-                    path = os.path.join(tmp_dir, file.name)
-                    with open(path, "wb") as f:
-                        f.write(file.read())
+            try:
+                with st.spinner("⏳ Đang xử lý..."):
 
-                    wb = safe_load(path, True)
-                    header = [str(c.value) for c in wb.active[1]]
+                    tmp_dir = tempfile.gettempdir()
+                    path_tpn, path_book1 = None, None
+
+                    # =========================
+                    # LOAD FILES
+                    # =========================
+                    for file in uploaded_files:
+                        path = os.path.join(tmp_dir, file.name)
+                        with open(path, "wb") as f:
+                            f.write(file.read())
+
+                        wb = safe_load(path, True)
+                        header = [str(c.value) for c in wb.active[1]]
+                        wb.close()
+
+                        if any("Shipment Nbr" in str(h) for h in header):
+                            path_tpn = path
+                        else:
+                            path_book1 = path
+
+                    save_path = os.path.join(tmp_dir, "TPN_KET_QUA.xlsx")
+                    kehoach_path = os.path.join(tmp_dir, "TPN_KE_HOACH_XE.xlsx")
+
+                    df2 = pd.read_excel(path_book1, header=None, dtype=str)
+
+                    # =========================
+                    # GROUP LIST
+                    # =========================
+                    group_list = []
+                    for _, row in df2.iterrows():
+                        nums = set()
+                        text = "" if pd.isna(row.iloc[0]) else str(row.iloc[0])
+
+                        for num in re.findall(r"\d+", text):
+                            if len(num) == 3:
+                                num = "0" + num
+                            if len(num) == 4:
+                                nums.add(num)
+
+                        if nums:
+                            group_list.append(nums)
+
+                    wb = safe_load(path_tpn)
+                    ws = wb.active
+                    col_index = find_shipment_col(ws)
+
+                    ketqua_numbers = set()
+
+                    # =========================
+                    # FIX: CHỈ LẤY 4 SỐ CUỐI
+                    # =========================
+                    for i in range(2, ws.max_row + 1):
+                        val = ws.cell(i, col_index).value
+                        if val:
+                            found = re.findall(r"\d+", str(val))
+                            if found:
+                                last = found[-1]
+                                if len(last) == 3:
+                                    last = "0" + last
+                                if len(last) == 4:
+                                    ketqua_numbers.add(last)
+
+                    pastel_colors = generate_distinct_colors(len(group_list))
+                    group_colors = {
+                        i: PatternFill("solid", fgColor=pastel_colors[i])
+                        for i in range(len(group_list))
+                    }
+
+                    header_fill = PatternFill("solid", fgColor="000080")
+                    header_font = Font(color="FFFFFF", bold=True)
+                    bold_font = Font(bold=True)
+
+                    for cell in ws[1]:
+                        cell.fill = header_fill
+                        cell.font = header_font
+
+                    for row in ws.iter_rows(min_row=2):
+                        for cell in row:
+                            if cell.value:
+                                cell.font = bold_font
+
+                    count = 0
+
+                    # =========================
+                    # FIX MATCH COLOR
+                    # =========================
+                    for i in range(2, ws.max_row + 1):
+                        val = ws.cell(i, col_index).value
+                        if val:
+                            nums = set()
+                            found = re.findall(r"\d+", str(val))
+
+                            if found:
+                                last = found[-1]
+                                if len(last) == 3:
+                                    last = "0" + last
+                                if len(last) == 4:
+                                    nums.add(last)
+
+                            for idx, g in enumerate(group_list):
+                                if nums & g:
+                                    ws.cell(i, col_index).fill = group_colors[idx]
+                                    count += 1
+                                    break
+
+                    ws.sheet_view.selection = [Selection(activeCell="A1", sqref="A1")]
+                    ws.sheet_view.topLeftCell = "A1"
+
+                    wb.save(save_path)
                     wb.close()
 
-                    if any("Shipment Nbr" in str(h) for h in header):
-                        path_tpn = path
-                    else:
-                        path_book1 = path
+                    # =========================
+                    # KE HOACH
+                    # =========================
+                    workbook = xlsxwriter.Workbook(kehoach_path)
+                    worksheet = workbook.add_worksheet()
 
-                save_path = os.path.join(tmp_dir, "TPN_KET_QUA.xlsx")
-                kehoach_path = os.path.join(tmp_dir, "TPN_KE_HOACH_XE.xlsx")
+                    red = workbook.add_format({'font_color': 'red'})
+                    normal = workbook.add_format({})
 
-                df2 = pd.read_excel(path_book1, header=None, dtype=str)
+                    col_width = 0
 
-                # =========================
-                # GROUP LIST (GIỮ NGUYÊN)
-                # =========================
-                group_list = []
-                for _, row in df2.iterrows():
-                    nums = set()
-                    text = "" if pd.isna(row.iloc[0]) else str(row.iloc[0])
+                    for r, row in df2.iterrows():
+                        text = "" if pd.isna(row.iloc[0]) else str(row.iloc[0])
+                        col_width = max(col_width, len(text))
 
-                    for num in re.findall(r"\d+", text):
-                        if len(num) == 3:
-                            num = "0" + num
-                        if len(num) == 4:
-                            nums.add(num)
+                        parts = []
+                        last = 0
 
-                    if nums:
-                        group_list.append(nums)
+                        for m in re.finditer(r"\d+", text):
+                            num = m.group()
+                            start, end = m.span()
+                            check = "0"+num if len(num)==3 else num
 
-                wb = safe_load(path_tpn)
-                ws = wb.active
-                col_index = find_shipment_col(ws)
+                            if start > last:
+                                parts += [normal, text[last:start]]
 
-                ketqua_numbers = set()
+                            parts += [red if check in ketqua_numbers else normal, num]
+                            last = end
 
-                # =========================
-                # ✅ FIX 1: CHỈ LẤY 4 SỐ CUỐI
-                # =========================
-                for i in range(2, ws.max_row + 1):
-                    val = ws.cell(i, col_index).value
-                    if val:
-                        found = re.findall(r"\d+", str(val))
-                        if found:
-                            last = found[-1]
-                            if len(last) == 3:
-                                last = "0" + last
-                            if len(last) == 4:
-                                ketqua_numbers.add(last)
+                        if last < len(text):
+                            parts += [normal, text[last:]]
 
-                pastel_colors = generate_distinct_colors(len(group_list))
-                group_colors = {
-                    i: PatternFill("solid", fgColor=pastel_colors[i])
-                    for i in range(len(group_list))
-                }
+                        try:
+                            worksheet.write_rich_string(r, 0, *parts)
+                        except:
+                            worksheet.write(r, 0, text)
 
-                header_fill = PatternFill("solid", fgColor="000080")
-                header_font = Font(color="FFFFFF", bold=True)
-                bold_font = Font(bold=True)
+                    worksheet.set_column(0, 0, col_width + 3)
+                    workbook.close()
 
-                for cell in ws[1]:
-                    cell.fill = header_fill
-                    cell.font = header_font
+                    # =========================
+                    # ZIP OUTPUT
+                    # =========================
+                    zip_path = os.path.join(tmp_dir, "TPN_COMPLETE.zip")
+                    with zipfile.ZipFile(zip_path, "w") as z:
+                        z.write(save_path, "TPN_KET_QUA.xlsx")
+                        z.write(kehoach_path, "TPN_KE_HOACH_XE.xlsx")
 
-                for row in ws.iter_rows(min_row=2):
-                    for cell in row:
-                        if cell.value:
-                            cell.font = bold_font
+                    with open(zip_path, "rb") as f:
+                        zip_data = f.read()
 
-                count = 0
+                st.success(f"✅ COMPLETE !!! Matched: {count}")
 
-                # =========================
-                # ✅ FIX 2: CHỈ LẤY 4 SỐ CUỐI KHI MATCH
-                # =========================
-                for i in range(2, ws.max_row + 1):
-                    val = ws.cell(i, col_index).value
-                    if val:
-                        nums = set()
-                        found = re.findall(r"\d+", str(val))
+                b64 = base64.b64encode(zip_data).decode()
+                st.components.v1.html(f"""
+                    <a id="dl" href="data:application/zip;base64,{b64}" download="THL TO SM.zip"></a>
+                    <script>document.getElementById('dl').click();</script>
+                """, height=0)
 
-                        if found:
-                            last = found[-1]
-                            if len(last) == 3:
-                                last = "0" + last
-                            if len(last) == 4:
-                                nums.add(last)
+                st.session_state["done"] = True
 
-                        for idx, g in enumerate(group_list):
-                            if nums & g:
-                                ws.cell(i, col_index).fill = group_colors[idx]
-                                count += 1
-                                break
+            except Exception as e:
+                st.error(f"❌ Lỗi: {e}")
 
-                ws.sheet_view.selection = [Selection(activeCell="A1", sqref="A1")]
-                ws.sheet_view.topLeftCell = "A1"
+    if st.session_state["done"]:
+        if st.button("🔄 Xử lý file mới"):
+            st.session_state["uploader_key"] += 1
+            st.session_state["done"] = False
+            st.rerun()
 
-                wb.save(save_path)
-                wb.close()
-
-                # =========================
-                # KE HOACH (GIỮ NGUYÊN)
-                # =========================
-                workbook = xlsxwriter.Workbook(kehoach_path)
-                worksheet = workbook.add_worksheet()
-
-                red = workbook.add_format({'font_color': 'red'})
-                normal = workbook.add_format({})
-
-                col_width = 0
-
-                for r, row in df2.iterrows():
-                    text = "" if pd.isna(row.iloc[0]) else str(row.iloc[0])
-                    col_width = max(col_width, len(text))
-
-                    parts = []
-                    last = 0
-
-                    for m in re.finditer(r"\d+", text):
-                        num = m.group()
-                        start, end = m.span()
-                        check = "0"+num if len(num)==3 else num
-
-                        if start > last:
-                            parts += [normal, text[last:start]]
-
-                        parts += [red if check in ketqua_numbers else normal, num]
-                        last = end
-
-                    if last < len(text):
-                        parts += [normal, text[last:]]
-
-                    try:
-                        worksheet.write_rich_string(r, 0, *parts)
-                    except:
-                        worksheet.write(r, 0, text)
-
-                worksheet.set_column(0, 0, col_width + 3)
-                workbook.close()
-
-                zip_path = os.path.join(tmp_dir, "TPN_COMPLETE.zip")
-                with zipfile.ZipFile(zip_path, "w") as z:
-                    z.write(save_path, "TPN_KET_QUA.xlsx")
-                    z.write(kehoach_path, "TPN_KE_HOACH_XE.xlsx")
-
-                with open(zip_path, "rb") as f:
-                    zip_data = f.read()
-
-            st.success(f"✅ COMPLETE !!! Matched: {count}")
-
-            b64 = base64.b64encode(zip_data).decode()
-            st.components.v1.html(f"""
-                <a id="dl" href="data:application/zip;base64,{b64}" download="THL TO SM.zip"></a>
-                <script>document.getElementById('dl').click();</script>
-            """, height=0)
-
-            st.session_state["done"] = True
-
-        except Exception as e:
-            st.error(f"❌ Lỗi: {e}")
+    st.markdown('</div>', unsafe_allow_html=True)
