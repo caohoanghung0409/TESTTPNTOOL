@@ -8,7 +8,7 @@ import xlsxwriter
 import base64
 import colorsys
 
-from openpyxl import Workbook, load_workbook
+from openpyxl import Workbook
 from openpyxl.styles import PatternFill, Font
 from openpyxl.worksheet.views import Selection
 from openpyxl.utils import get_column_letter
@@ -74,25 +74,21 @@ def generate_distinct_colors(n):
     return base + colors
 
 # =========================
-# FIX COLUMN WIDTH (SAFE VERSION)
+# AUTO COLUMN WIDTH FIX
 # =========================
-def copy_column_width_from_source(src_path, ws_dst):
-    try:
-        wb_src = load_workbook(src_path, data_only=True, read_only=True)
-        ws_src = wb_src.worksheets[0]
+def auto_adjust_column_width(ws):
+    for col in ws.columns:
+        max_length = 0
+        col_letter = get_column_letter(col[0].column)
 
-        for col_letter in ws_src.column_dimensions:
+        for cell in col:
             try:
-                width = ws_src.column_dimensions[col_letter].width
-                if width is not None:
-                    ws_dst.column_dimensions[col_letter].width = width
+                if cell.value:
+                    max_length = max(max_length, len(str(cell.value)))
             except:
-                continue
+                pass
 
-        wb_src.close()
-
-    except Exception:
-        pass
+        ws.column_dimensions[col_letter].width = max_length + 2
 
 # =========================
 # HEADER
@@ -108,6 +104,7 @@ st.markdown("""
 # UI
 # =========================
 with st.container():
+    st.markdown('<div class="card">', unsafe_allow_html=True)
 
     uploaded_files = st.file_uploader(
         "📂 Chọn 2 file Excel",
@@ -166,7 +163,7 @@ with st.container():
                             group_list.append(nums)
 
                     # =========================
-                    # TPN DATA
+                    # TPN DATA (CLEAN)
                     # =========================
                     df_tpn = pd.read_excel(path_tpn, engine="calamine", dtype=str)
 
@@ -179,7 +176,7 @@ with st.container():
                         ws.append(list(r.values))
 
                     # =========================
-                    # FIND COLUMN
+                    # FIND COL
                     # =========================
                     col_index = None
                     for idx, c in enumerate(ws[1], start=1):
@@ -189,6 +186,9 @@ with st.container():
 
                     ketqua_numbers = set()
 
+                    # =========================
+                    # LAST 4 DIGITS
+                    # =========================
                     for i in range(2, ws.max_row + 1):
                         val = ws.cell(i, col_index).value
                         if val:
@@ -210,10 +210,12 @@ with st.container():
                     header_font = Font(color="FFFFFF", bold=True)
                     bold_font = Font(bold=True)
 
+                    # header style
                     for cell in ws[1]:
                         cell.fill = header_fill
                         cell.font = header_font
 
+                    # bold
                     for row in ws.iter_rows(min_row=2):
                         for cell in row:
                             if cell.value:
@@ -249,9 +251,9 @@ with st.container():
                     ws.sheet_view.selection = [Selection(activeCell="A1", sqref="A1")]
 
                     # =========================
-                    # FIX: COPY COLUMN WIDTH
+                    # 🔥 AUTO COLUMN WIDTH FIX HERE
                     # =========================
-                    copy_column_width_from_source(path_tpn, ws)
+                    auto_adjust_column_width(ws)
 
                     wb.save(save_path)
                     wb.close()
@@ -325,3 +327,5 @@ with st.container():
             st.session_state["uploader_key"] += 1
             st.session_state["done"] = False
             st.rerun()
+
+    st.markdown('</div>', unsafe_allow_html=True)
