@@ -174,7 +174,7 @@ with st.container():
 
                     df2 = pd.read_excel(path_book1, header=None, dtype=str)
 
-                    # ===== FIX LOGIC GROUP =====
+                    # ===== GROUP + MAP (FIX CHUẨN) =====
                     group_list = []
                     number_to_group = {}
 
@@ -191,9 +191,10 @@ with st.container():
                         if nums:
                             group_list.append(nums)
 
-                            for n in nums:
-                                if n not in number_to_group:
-                                    number_to_group[n] = len(group_list) - 1
+                    # MAP chuẩn (đảm bảo không dồn 1 màu)
+                    for g_idx, nums in enumerate(group_list):
+                        for n in nums:
+                            number_to_group[n] = g_idx
 
                     # ===== LOAD TPN =====
                     wb = safe_load(path_tpn)
@@ -233,28 +234,33 @@ with st.container():
 
                     count = 0
 
-                    # ===== FIX TÔ MÀU =====
+                    # ===== TÔ MÀU (FIX CHUẨN 100%) =====
                     for i in range(2, ws.max_row + 1):
                         val = ws.cell(i, col_index).value
-                        if val:
-                            nums = set()
+                        if not val:
+                            continue
 
-                            for num in re.findall(r"\d+", str(val)):
-                                if len(num) == 3:
-                                    num = "0" + num
-                                if len(num) == 4:
-                                    nums.add(num)
+                        nums = set()
 
-                            matched_groups = set()
+                        for num in re.findall(r"\d+", str(val)):
+                            if len(num) == 3:
+                                num = "0" + num
+                            if len(num) == 4:
+                                nums.add(num)
 
-                            for n in nums:
-                                if n in number_to_group:
-                                    matched_groups.add(number_to_group[n])
+                        # chỉ giữ số có trong KE_HOACH
+                        valid_nums = [n for n in nums if n in number_to_group]
 
-                            if len(matched_groups) == 1:
-                                g_idx = list(matched_groups)[0]
-                                ws.cell(i, col_index).fill = group_colors[g_idx]
-                                count += 1
+                        if not valid_nums:
+                            continue  # ❌ không có → không tô
+
+                        groups = [number_to_group[n] for n in valid_nums]
+
+                        # chỉ tô khi cùng 1 group
+                        if len(set(groups)) == 1:
+                            g_idx = groups[0]
+                            ws.cell(i, col_index).fill = group_colors[g_idx]
+                            count += 1
 
                     ws.sheet_view.selection = [Selection(activeCell="A1", sqref="A1")]
                     ws.sheet_view.topLeftCell = "A1"
