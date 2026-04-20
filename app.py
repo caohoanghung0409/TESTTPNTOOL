@@ -168,7 +168,7 @@ with st.container():
                         ws.append(list(r.values))
 
                     # =========================
-                    # FIND COLS
+                    # FIND COLUMNS
                     # =========================
                     col_index = None
                     date_col_index = None
@@ -235,13 +235,20 @@ with st.container():
                     ws.sheet_view.selection = [Selection(activeCell="A1", sqref="A1")]
 
                     # =========================
-                    # ⭐ FORMAT SHIPMENT DATE (ONLY CHANGE)
+                    # ✅ FIX SHIPMENT DATE (DD/MM/YYYY)
                     # =========================
                     if date_col_index:
                         for i in range(2, ws.max_row + 1):
                             cell = ws.cell(i, date_col_index)
+
                             if cell.value:
-                                cell.number_format = "DD/MM/YYYY"
+                                try:
+                                    if isinstance(cell.value, str):
+                                        cell.value = datetime.strptime(cell.value[:10], "%Y-%m-%d")
+
+                                    cell.number_format = "DD/MM/YYYY"
+                                except:
+                                    pass
 
                     auto_adjust_column_width(ws)
 
