@@ -108,14 +108,15 @@ with st.container():
                     path_tpn, path_book1 = None, None
 
                     # =========================
-                    # LOAD FILES
+                    # SAVE FILES
                     # =========================
                     for file in uploaded_files:
                         path = os.path.join(tmp_dir, file.name)
                         with open(path, "wb") as f:
                             f.write(file.read())
 
-                        df_check = pd.read_excel(path, dtype=str, engine="openpyxl")
+                        # 🔥 FIX: dùng calamine (không đọc style Excel nữa)
+                        df_check = pd.read_excel(path, engine="calamine", dtype=str)
 
                         if any("Shipment Nbr" in str(c) for c in df_check.columns):
                             path_tpn = path
@@ -128,7 +129,7 @@ with st.container():
                     # =========================
                     # BOOK1
                     # =========================
-                    df2 = pd.read_excel(path_book1, header=None, dtype=str)
+                    df2 = pd.read_excel(path_book1, engine="calamine", header=None, dtype=str)
 
                     group_list = []
                     for _, row in df2.iterrows():
@@ -145,9 +146,9 @@ with st.container():
                             group_list.append(nums)
 
                     # =========================
-                    # 🔥 FIX CORE: BUILD CLEAN TPN (NO OPENPYXL LOAD)
+                    # TPN DATA (SAFE)
                     # =========================
-                    df_tpn = pd.read_excel(path_tpn, dtype=str, engine="openpyxl")
+                    df_tpn = pd.read_excel(path_tpn, engine="calamine", dtype=str)
 
                     col_name = None
                     for c in df_tpn.columns:
@@ -158,6 +159,9 @@ with st.container():
                     if col_name is None:
                         raise Exception("Không tìm thấy cột Shipment Nbr")
 
+                    # =========================
+                    # BUILD CLEAN WORKBOOK
+                    # =========================
                     wb = Workbook()
                     ws = wb.active
 
@@ -166,9 +170,7 @@ with st.container():
                     for _, r in df_tpn.iterrows():
                         ws.append(list(r.values))
 
-                    # =========================
-                    # FIND COL INDEX
-                    # =========================
+                    # find column index
                     col_index = None
                     for idx, c in enumerate(ws[1], start=1):
                         if "Shipment Nbr" in str(c.value):
@@ -194,11 +196,8 @@ with st.container():
                     # =========================
                     # COLORS
                     # =========================
-                    pastel_colors = generate_distinct_colors(len(group_list))
-                    group_colors = {
-                        i: pastel_colors[i]
-                        for i in range(len(group_list))
-                    }
+                    colors = generate_distinct_colors(len(group_list))
+                    group_colors = {i: colors[i] for i in range(len(group_list))}
 
                     header_fill = PatternFill("solid", fgColor="000080")
                     header_font = Font(color="FFFFFF", bold=True)
@@ -209,7 +208,7 @@ with st.container():
                         cell.fill = header_fill
                         cell.font = header_font
 
-                    # bold all
+                    # bold
                     for row in ws.iter_rows(min_row=2):
                         for cell in row:
                             if cell.value:
@@ -218,7 +217,7 @@ with st.container():
                     count = 0
 
                     # =========================
-                    # MATCH + COLOR (SAFE)
+                    # MATCH + COLOR
                     # =========================
                     for i in range(2, ws.max_row + 1):
                         val = ws.cell(i, col_index).value
