@@ -4,245 +4,302 @@ import re
 import tempfile
 import os
 import zipfile
+import shutil
+import uuid
 import xlsxwriter
 import base64
 import colorsys
 
 from openpyxl import load_workbook
 from openpyxl.styles import PatternFill, Font
+from openpyxl.worksheet.views import Selection
 
 st.set_page_config(page_title="THL TO SM", layout="centered")
 
 # =========================
-# UI (GIỮ NGUYÊN)
+# CSS (GIỮ NGUYÊN GIAO DIỆN)
 # =========================
 st.markdown("""
 <style>
-header {display:none !important;}
-#MainMenu {visibility:hidden;}
-footer {visibility:hidden;}
-.block-container {padding-top:0rem !important;}
+header {display: none !important;}
+#MainMenu {visibility: hidden;}
+footer {visibility: hidden;}
+.block-container {padding-top: 0rem !important;}
 
-.header{text-align:center;padding:8px 0;}
-.header h1{color:#0284c7;margin:0;}
-.header p{color:#64748b;margin:0;}
+.header {text-align: center; padding: 8px 0;}
+.header h1 {color: #0284c7; margin: 0;}
+.header p {color: #64748b; margin: 0;}
 
-.card{background:white;padding:20px;border-radius:12px;}
+.card {background: white; padding: 20px; border-radius: 12px;}
 
-.stButton>button{
-width:100%;
-height:42px;
-border-radius:10px;
-background:linear-gradient(90deg,#0ea5e9,#22c55e);
-color:white;
+.stButton>button {
+    width: 100%;
+    height: 42px;
+    border-radius: 10px;
+    background: linear-gradient(90deg, #0ea5e9, #22c55e);
+    color: white;
 }
 </style>
 """, unsafe_allow_html=True)
 
 # =========================
-# COLOR
+# STATE
 # =========================
-def gen_colors(n):
-    base = ["FFD6D6","FFE0EB","EBD6FF","D6E4FF","D6F5FF","D6FFF5"]
-    colors = base[:]
-    for i in range(max(0, n-len(base))):
-        h = (i*0.15)%1
-        r,g,b = colorsys.hsv_to_rgb(h,0.3,0.95)
-        colors.append('%02X%02X%02X'%(int(r*255),int(g*255),int(b*255)))
-    return colors
+if "uploader_key" not in st.session_state:
+    st.session_state["uploader_key"] = 0
+
+if "done" not in st.session_state:
+    st.session_state["done"] = False
 
 # =========================
-# SAFE LAST 4 DIGITS
+# COLOR
 # =========================
-def last4(x):
-    found = re.findall(r"\d+", str(x))
-    if not found:
-        return None
-    v = found[-1]
-    if len(v) == 3:
-        v = "0"+v
-    return v if len(v)==4 else None
+PASTEL_STRONG_DISTINCT = [
+    "FFD6D6","FFE0EB","EBD6FF","D6E4FF","D6F5FF","D6FFF5",
+    "D6FFD6","F0FFD6","FFF5D6","FFEBD6","FFDCD6","F5D6FF"
+]
+
+def generate_distinct_colors(n):
+    colors = []
+    base = PASTEL_STRONG_DISTINCT.copy()
+
+    extra_needed = max(0, n - len(base))
+
+    for i in range(extra_needed):
+        h = (i * 0.17) % 1
+        s = 0.25
+        v = 0.95
+        r, g, b = colorsys.hsv_to_rgb(h, s, v)
+        colors.append('%02X%02X%02X' % (int(r*255), int(g*255), int(b*255)))
+
+    return base + colors
+
+# =========================
+# SAFE LOAD
+# =========================
+def safe_load(path, read_only=False):
+    try:
+        return load_workbook(path, read_only=read_only, data_only=True, keep_links=False)
+    except:
+        return load_workbook(path, read_only=read_only, data_only=True, keep_links=False)
+
+def find_shipment_col(ws):
+    for cell in ws[1]:
+        if cell.value and "Shipment Nbr" in str(cell.value):
+            return cell.column
+    return None
 
 # =========================
 # HEADER
 # =========================
 st.markdown("""
 <div class="header">
-<h1>⚡ THL TO SM</h1>
-<p>Xử lý Shipment ổn định</p>
+    <h1>⚡ THL TO SM</h1>
+    <p>Xử lý & đối soát Shipment nhanh chóng</p>
 </div>
 """, unsafe_allow_html=True)
 
 # =========================
-# UI
+# UI CARD (RESTORED)
 # =========================
 with st.container():
     st.markdown('<div class="card">', unsafe_allow_html=True)
 
-    files = st.file_uploader(
+    uploaded_files = st.file_uploader(
         "📂 Chọn 2 file Excel",
         type=["xlsx"],
-        accept_multiple_files=True
+        accept_multiple_files=True,
+        key=f"uploader_{st.session_state['uploader_key']}"
     )
 
-    if files and len(files)==2:
+    ready = uploaded_files and len(uploaded_files) == 2
 
-        if st.button("🚀 RUN"):
+    if ready and not st.session_state["done"]:
+
+        if st.button("🚀 Bắt đầu xử lý"):
 
             try:
-                tmp = tempfile.gettempdir()
+                with st.spinner("⏳ Đang xử lý..."):
 
-                path1, path2 = None, None
+                    tmp_dir = tempfile.gettempdir()
+                    path_tpn, path_book1 = None, None
 
-                # =========================
-                # SAVE FILES
-                # =========================
-                for f in files:
-                    p = os.path.join(tmp, f.name)
-                    with open(p,"wb") as w:
-                        w.write(f.read())
+                    # =========================
+                    # LOAD FILES
+                    # =========================
+                    for file in uploaded_files:
+                        path = os.path.join(tmp_dir, file.name)
+                        with open(path, "wb") as f:
+                            f.write(file.read())
 
-                    df_check = pd.read_excel(p, dtype=str)
+                        wb = safe_load(path, True)
+                        header = [str(c.value) for c in wb.active[1]]
+                        wb.close()
 
-                    if df_check.astype(str).apply(lambda x: x.str.contains("Shipment", na=False)).any().any():
-                        path1 = p
-                    else:
-                        path2 = p
+                        if any("Shipment Nbr" in str(h) for h in header):
+                            path_tpn = path
+                        else:
+                            path_book1 = path
 
-                # =========================
-                # ERP SAFE READ (PANDAS ONLY)
-                # =========================
-                df_tpn = pd.read_excel(path1, dtype=str).fillna("")
-                df_book = pd.read_excel(path2, header=None, dtype=str).fillna("")
+                    save_path = os.path.join(tmp_dir, "TPN_KET_QUA.xlsx")
+                    kehoach_path = os.path.join(tmp_dir, "TPN_KE_HOACH_XE.xlsx")
 
-                # detect shipment column
-                shipment_col = None
-                for c in df_tpn.columns:
-                    if df_tpn[c].astype(str).str.contains("Shipment", na=False).any():
-                        shipment_col = c
-                        break
+                    df2 = pd.read_excel(path_book1, header=None, dtype=str)
 
-                if shipment_col is None:
-                    shipment_col = df_tpn.columns[0]
+                    # =========================
+                    # GROUP LIST
+                    # =========================
+                    group_list = []
+                    for _, row in df2.iterrows():
+                        nums = set()
+                        text = "" if pd.isna(row.iloc[0]) else str(row.iloc[0])
 
-                # =========================
-                # BUILD KEQUA SET
-                # =========================
-                ketqua = set()
-                for v in df_tpn[shipment_col]:
-                    x = last4(v)
-                    if x:
-                        ketqua.add(x)
+                        for num in re.findall(r"\d+", text):
+                            if len(num) == 3:
+                                num = "0" + num
+                            if len(num) == 4:
+                                nums.add(num)
 
-                # =========================
-                # GROUP BOOK1
-                # =========================
-                groups = []
-                for _, r in df_book.iterrows():
-                    t = str(r.iloc[0]) if len(r)>0 else ""
-                    s = set()
-                    for n in re.findall(r"\d+", t):
-                        if len(n)==3: n="0"+n
-                        if len(n)==4: s.add(n)
-                    if s:
-                        groups.append(s)
+                        if nums:
+                            group_list.append(nums)
 
-                colors = gen_colors(len(groups))
+                    wb = safe_load(path_tpn)
+                    ws = wb.active
+                    col_index = find_shipment_col(ws)
 
-                # =========================
-                # OUTPUT FILES
-                # =========================
-                out1 = os.path.join(tmp,"TPN_KET_QUA.xlsx")
-                out2 = os.path.join(tmp,"TPN_KE_HOACH_XE.xlsx")
+                    ketqua_numbers = set()
 
-                # =========================
-                # WRITE FILE 1 (OPENPYXL SAFE)
-                # =========================
-                wb = load_workbook(path1)
-                ws = wb.active
+                    # =========================
+                    # FIX: CHỈ LẤY 4 SỐ CUỐI
+                    # =========================
+                    for i in range(2, ws.max_row + 1):
+                        val = ws.cell(i, col_index).value
+                        if val:
+                            found = re.findall(r"\d+", str(val))
+                            if found:
+                                last = found[-1]
+                                if len(last) == 3:
+                                    last = "0" + last
+                                if len(last) == 4:
+                                    ketqua_numbers.add(last)
 
-                header_fill = PatternFill("solid", fgColor="000080")
-                header_font = Font(color="FFFFFF", bold=True)
+                    pastel_colors = generate_distinct_colors(len(group_list))
+                    group_colors = {
+                        i: PatternFill("solid", fgColor=pastel_colors[i])
+                        for i in range(len(group_list))
+                    }
 
-                for c in ws[1]:
-                    c.fill = header_fill
-                    c.font = header_font
+                    header_fill = PatternFill("solid", fgColor="000080")
+                    header_font = Font(color="FFFFFF", bold=True)
+                    bold_font = Font(bold=True)
 
-                count = 0
+                    for cell in ws[1]:
+                        cell.fill = header_fill
+                        cell.font = header_font
 
-                for i in range(2, ws.max_row+1):
-                    val = ws.cell(i, ws.max_column).value
-                    x = last4(val)
+                    for row in ws.iter_rows(min_row=2):
+                        for cell in row:
+                            if cell.value:
+                                cell.font = bold_font
 
-                    if x:
-                        for idx,g in enumerate(groups):
-                            if x in g:
-                                ws.cell(i, ws.max_column).fill = PatternFill("solid", fgColor=colors[idx])
-                                count+=1
-                                break
+                    count = 0
 
-                wb.save(out1)
-                wb.close()
+                    # =========================
+                    # FIX MATCH COLOR
+                    # =========================
+                    for i in range(2, ws.max_row + 1):
+                        val = ws.cell(i, col_index).value
+                        if val:
+                            nums = set()
+                            found = re.findall(r"\d+", str(val))
 
-                # =========================
-                # WRITE FILE 2 (KEEP FORMAT)
-                # =========================
-                workbook = xlsxwriter.Workbook(out2)
-                sheet = workbook.add_worksheet()
+                            if found:
+                                last = found[-1]
+                                if len(last) == 3:
+                                    last = "0" + last
+                                if len(last) == 4:
+                                    nums.add(last)
 
-                red = workbook.add_format({'font_color':'red'})
-                normal = workbook.add_format({})
+                            for idx, g in enumerate(group_list):
+                                if nums & g:
+                                    ws.cell(i, col_index).fill = group_colors[idx]
+                                    count += 1
+                                    break
 
-                for r,row in df_book.iterrows():
+                    ws.sheet_view.selection = [Selection(activeCell="A1", sqref="A1")]
+                    ws.sheet_view.topLeftCell = "A1"
 
-                    text = str(row.iloc[0]) if len(row)>0 else ""
+                    wb.save(save_path)
+                    wb.close()
 
-                    parts=[]
-                    last=0
+                    # =========================
+                    # KE HOACH
+                    # =========================
+                    workbook = xlsxwriter.Workbook(kehoach_path)
+                    worksheet = workbook.add_worksheet()
 
-                    for m in re.finditer(r"\d+",text):
-                        n=m.group()
-                        s,e=m.span()
+                    red = workbook.add_format({'font_color': 'red'})
+                    normal = workbook.add_format({})
 
-                        chk = "0"+n if len(n)==3 else n
+                    col_width = 0
 
-                        if s>last:
-                            parts += [normal,text[last:s]]
+                    for r, row in df2.iterrows():
+                        text = "" if pd.isna(row.iloc[0]) else str(row.iloc[0])
+                        col_width = max(col_width, len(text))
 
-                        parts += [red if chk in ketqua else normal,n]
-                        last=e
+                        parts = []
+                        last = 0
 
-                    if last<len(text):
-                        parts += [normal,text[last:]]
+                        for m in re.finditer(r"\d+", text):
+                            num = m.group()
+                            start, end = m.span()
+                            check = "0"+num if len(num)==3 else num
 
-                    try:
-                        sheet.write_rich_string(r,0,*parts)
-                    except:
-                        sheet.write(r,0,text)
+                            if start > last:
+                                parts += [normal, text[last:start]]
 
-                workbook.close()
+                            parts += [red if check in ketqua_numbers else normal, num]
+                            last = end
 
-                # =========================
-                # ZIP
-                # =========================
-                zip_path = os.path.join(tmp,"out.zip")
-                with zipfile.ZipFile(zip_path,"w") as z:
-                    z.write(out1,"TPN_KET_QUA.xlsx")
-                    z.write(out2,"TPN_KE_HOACH_XE.xlsx")
+                        if last < len(text):
+                            parts += [normal, text[last:]]
 
-                with open(zip_path,"rb") as f:
-                    data = f.read()
+                        try:
+                            worksheet.write_rich_string(r, 0, *parts)
+                        except:
+                            worksheet.write(r, 0, text)
 
-                st.success(f"✅ DONE - MATCHED: {count}")
+                    worksheet.set_column(0, 0, col_width + 3)
+                    workbook.close()
 
-                b64 = base64.b64encode(data).decode()
-                st.markdown(f"""
-                <a href="data:application/zip;base64,{b64}" download="THL_TO_SM.zip">
-                📥 DOWNLOAD FILE
-                </a>
-                """, unsafe_allow_html=True)
+                    # =========================
+                    # ZIP OUTPUT
+                    # =========================
+                    zip_path = os.path.join(tmp_dir, "TPN_COMPLETE.zip")
+                    with zipfile.ZipFile(zip_path, "w") as z:
+                        z.write(save_path, "TPN_KET_QUA.xlsx")
+                        z.write(kehoach_path, "TPN_KE_HOACH_XE.xlsx")
+
+                    with open(zip_path, "rb") as f:
+                        zip_data = f.read()
+
+                st.success(f"✅ COMPLETE !!! Matched: {count}")
+
+                b64 = base64.b64encode(zip_data).decode()
+                st.components.v1.html(f"""
+                    <a id="dl" href="data:application/zip;base64,{b64}" download="THL TO SM.zip"></a>
+                    <script>document.getElementById('dl').click();</script>
+                """, height=0)
+
+                st.session_state["done"] = True
 
             except Exception as e:
                 st.error(f"❌ Lỗi: {e}")
+
+    if st.session_state["done"]:
+        if st.button("🔄 Xử lý file mới"):
+            st.session_state["uploader_key"] += 1
+            st.session_state["done"] = False
+            st.rerun()
 
     st.markdown('</div>', unsafe_allow_html=True)
