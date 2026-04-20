@@ -8,7 +8,7 @@ import xlsxwriter
 import base64
 import colorsys
 
-from openpyxl import Workbook
+from openpyxl import Workbook, load_workbook
 from openpyxl.styles import PatternFill, Font
 from openpyxl.worksheet.views import Selection
 from openpyxl.utils import get_column_letter
@@ -74,21 +74,15 @@ def generate_distinct_colors(n):
     return base + colors
 
 # =========================
-# AUTO COLUMN WIDTH FIX
+# COPY COLUMN WIDTH
 # =========================
-def auto_adjust_column_width(ws):
-    for col in ws.columns:
-        max_length = 0
-        col_letter = get_column_letter(col[0].column)
+def copy_column_width_from_source(src_path, ws_dst):
+    wb_src = load_workbook(src_path)
+    ws_src = wb_src.active
 
-        for cell in col:
-            try:
-                if cell.value:
-                    max_length = max(max_length, len(str(cell.value)))
-            except:
-                pass
-
-        ws.column_dimensions[col_letter].width = max_length + 2
+    for col_letter, dim in ws_src.column_dimensions.items():
+        if dim.width:
+            ws_dst.column_dimensions[col_letter].width = dim.width
 
 # =========================
 # HEADER
@@ -104,7 +98,6 @@ st.markdown("""
 # UI
 # =========================
 with st.container():
-    st.markdown('<div class="card">', unsafe_allow_html=True)
 
     uploaded_files = st.file_uploader(
         "📂 Chọn 2 file Excel",
@@ -163,7 +156,7 @@ with st.container():
                             group_list.append(nums)
 
                     # =========================
-                    # TPN DATA (CLEAN)
+                    # TPN DATA
                     # =========================
                     df_tpn = pd.read_excel(path_tpn, engine="calamine", dtype=str)
 
@@ -210,12 +203,10 @@ with st.container():
                     header_font = Font(color="FFFFFF", bold=True)
                     bold_font = Font(bold=True)
 
-                    # header style
                     for cell in ws[1]:
                         cell.fill = header_fill
                         cell.font = header_font
 
-                    # bold
                     for row in ws.iter_rows(min_row=2):
                         for cell in row:
                             if cell.value:
@@ -251,9 +242,9 @@ with st.container():
                     ws.sheet_view.selection = [Selection(activeCell="A1", sqref="A1")]
 
                     # =========================
-                    # 🔥 AUTO COLUMN WIDTH FIX HERE
+                    # 🔥 COPY COLUMN WIDTH (IMPORTANT FIX)
                     # =========================
-                    auto_adjust_column_width(ws)
+                    copy_column_width_from_source(path_tpn, ws)
 
                     wb.save(save_path)
                     wb.close()
@@ -327,5 +318,3 @@ with st.container():
             st.session_state["uploader_key"] += 1
             st.session_state["done"] = False
             st.rerun()
-
-    st.markdown('</div>', unsafe_allow_html=True)
