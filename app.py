@@ -75,18 +75,29 @@ def generate_distinct_colors(n):
     return base + colors
 
 # =========================
-# FIX ERP FILE (QUAN TRỌNG)
+# 🔥 FIX ERP FILE (ROOT CAUSE FIX)
 # =========================
-def safe_load_erp(path):
-    try:
-        return load_workbook(path, data_only=True, keep_links=False)
-    except:
-        # rebuild file nếu ERP corrupt styles
-        tmp = path.replace(".xlsx", "_repaired.xlsx")
-        wb = load_workbook(path, data_only=True, keep_links=False)
-        wb.save(tmp)
-        wb.close()
-        return load_workbook(tmp, data_only=True, keep_links=False)
+def load_clean_excel(path):
+    """
+    Remove broken styles.xml from ERP Excel (CAUSE OF Fill ERROR)
+    """
+    tmp_dir = os.path.join(tempfile.gettempdir(), f"clean_{uuid.uuid4().hex}")
+    os.makedirs(tmp_dir, exist_ok=True)
+
+    with zipfile.ZipFile(path, 'r') as zin:
+        zin.extractall(tmp_dir)
+
+    # ❗ REMOVE BROKEN STYLE FILE
+    style_path = os.path.join(tmp_dir, "xl", "styles.xml")
+    if os.path.exists(style_path):
+        os.remove(style_path)
+
+    cleaned_path = os.path.join(tmp_dir, "clean.xlsx")
+
+    shutil.make_archive(cleaned_path.replace(".xlsx", ""), 'zip', tmp_dir)
+    os.rename(cleaned_path.replace(".xlsx", ".zip"), cleaned_path)
+
+    return cleaned_path
 
 # =========================
 # FIND COLUMN
@@ -98,7 +109,7 @@ def find_shipment_col(ws):
     return None
 
 # =========================
-# HEADER UI
+# UI HEADER
 # =========================
 st.markdown("""
 <div class="header">
@@ -140,12 +151,14 @@ with st.container():
                         with open(path, "wb") as f:
                             f.write(file.read())
 
-                        wb = safe_load_erp(path)
+                        # 🔥 FIX ERP READ
+                        clean_path = load_clean_excel(path)
+                        wb = load_workbook(clean_path, data_only=True)
                         header = [str(c.value) for c in wb.active[1]]
                         wb.close()
 
                         if any("Shipment Nbr" in str(h) for h in header):
-                            path_tpn = path
+                            path_tpn = clean_path
                         else:
                             path_book1 = path
 
@@ -172,9 +185,9 @@ with st.container():
                             group_list.append(nums)
 
                     # =========================
-                    # LOAD TPN (FIX ERP ERROR HERE)
+                    # LOAD TPN (CLEANED)
                     # =========================
-                    wb = safe_load_erp(path_tpn)
+                    wb = load_workbook(path_tpn, data_only=True)
                     ws = wb.active
                     col_index = find_shipment_col(ws)
 
@@ -216,7 +229,7 @@ with st.container():
                     count = 0
 
                     # =========================
-                    # COLOR MATCH (FIXED)
+                    # COLOR MATCH
                     # =========================
                     for i in range(2, ws.max_row + 1):
                         val = ws.cell(i, col_index).value
