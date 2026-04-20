@@ -174,11 +174,8 @@ with st.container():
 
                     df2 = pd.read_excel(path_book1, header=None, dtype=str)
 
-                    # ===== GROUP + MAP (FIX CHUẨN) =====
                     group_list = []
-                    number_to_group = {}
-
-                    for idx, row in df2.iterrows():
+                    for _, row in df2.iterrows():
                         nums = set()
                         text = "" if pd.isna(row.iloc[0]) else str(row.iloc[0])
 
@@ -191,12 +188,6 @@ with st.container():
                         if nums:
                             group_list.append(nums)
 
-                    # MAP chuẩn (đảm bảo không dồn 1 màu)
-                    for g_idx, nums in enumerate(group_list):
-                        for n in nums:
-                            number_to_group[n] = g_idx
-
-                    # ===== LOAD TPN =====
                     wb = safe_load(path_tpn)
                     ws = wb.active
                     col_index = find_shipment_col(ws)
@@ -213,7 +204,6 @@ with st.container():
                                     ketqua_numbers.add(num)
 
                     pastel_colors = generate_distinct_colors(len(group_list))
-
                     group_colors = {
                         i: PatternFill("solid", fgColor=pastel_colors[i])
                         for i in range(len(group_list))
@@ -234,33 +224,22 @@ with st.container():
 
                     count = 0
 
-                    # ===== TÔ MÀU (FIX CHUẨN 100%) =====
                     for i in range(2, ws.max_row + 1):
                         val = ws.cell(i, col_index).value
-                        if not val:
-                            continue
+                        if val:
+                            nums = set()
 
-                        nums = set()
+                            for num in re.findall(r"\d+", str(val)):
+                                if len(num) == 3:
+                                    num = "0" + num
+                                if len(num) == 4:
+                                    nums.add(num)
 
-                        for num in re.findall(r"\d+", str(val)):
-                            if len(num) == 3:
-                                num = "0" + num
-                            if len(num) == 4:
-                                nums.add(num)
-
-                        # chỉ giữ số có trong KE_HOACH
-                        valid_nums = [n for n in nums if n in number_to_group]
-
-                        if not valid_nums:
-                            continue  # ❌ không có → không tô
-
-                        groups = [number_to_group[n] for n in valid_nums]
-
-                        # chỉ tô khi cùng 1 group
-                        if len(set(groups)) == 1:
-                            g_idx = groups[0]
-                            ws.cell(i, col_index).fill = group_colors[g_idx]
-                            count += 1
+                            for idx, g in enumerate(group_list):
+                                if nums & g:
+                                    ws.cell(i, col_index).fill = group_colors[idx]
+                                    count += 1
+                                    break
 
                     ws.sheet_view.selection = [Selection(activeCell="A1", sqref="A1")]
                     ws.sheet_view.topLeftCell = "A1"
@@ -268,7 +247,9 @@ with st.container():
                     wb.save(save_path)
                     wb.close()
 
-                    # ===== KE HOACH =====
+                    # =========================
+                    # KE HOACH (ĐÃ BỎ LEGEND)
+                    # =========================
                     workbook = xlsxwriter.Workbook(kehoach_path)
                     worksheet = workbook.add_worksheet()
 
