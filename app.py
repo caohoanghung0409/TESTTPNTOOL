@@ -11,6 +11,8 @@ import base64
 import colorsys
 
 from openpyxl import load_workbook
+from openpyxl.styles import PatternFill, Font
+from openpyxl.worksheet.views import Selection
 
 st.set_page_config(page_title="THL TO SM", layout="centered")
 
@@ -172,9 +174,6 @@ with st.container():
 
                     df2 = pd.read_excel(path_book1, header=None, dtype=str)
 
-                    # =========================
-                    # GROUP LIST
-                    # =========================
                     group_list = []
                     for _, row in df2.iterrows():
                         nums = set()
@@ -189,75 +188,67 @@ with st.container():
                         if nums:
                             group_list.append(nums)
 
-                    pastel_colors = generate_distinct_colors(len(group_list))
-
-                    # =========================
-                    # TPN_KET_QUA (FIX CHUẨN)
-                    # =========================
-                    wb = safe_load(path_tpn, True)
+                    wb = safe_load(path_tpn)
                     ws = wb.active
                     col_index = find_shipment_col(ws)
 
-                    workbook = xlsxwriter.Workbook(save_path)
-                    worksheet = workbook.add_worksheet()
+                    ketqua_numbers = set()
 
-                    formats = [workbook.add_format({'bg_color': f'#{c}'}) for c in pastel_colors]
-                    normal = workbook.add_format({})
+                    for i in range(2, ws.max_row + 1):
+                        val = ws.cell(i, col_index).value
+                        if val:
+                            for num in re.findall(r"\d+", str(val)):
+                                if len(num) == 3:
+                                    num = "0" + num
+                                if len(num) == 4:
+                                    ketqua_numbers.add(num)
 
-                    # header
-                    for col, cell in enumerate(ws[1]):
-                        worksheet.write(0, col, cell.value)
+                    pastel_colors = generate_distinct_colors(len(group_list))
+                    group_colors = {
+                        i: PatternFill("solid", fgColor=pastel_colors[i])
+                        for i in range(len(group_list))
+                    }
+
+                    header_fill = PatternFill("solid", fgColor="000080")
+                    header_font = Font(color="FFFFFF", bold=True)
+                    bold_font = Font(bold=True)
+
+                    for cell in ws[1]:
+                        cell.fill = header_fill
+                        cell.font = header_font
+
+                    for row in ws.iter_rows(min_row=2):
+                        for cell in row:
+                            if cell.value:
+                                cell.font = bold_font
 
                     count = 0
 
-                    for r in range(2, ws.max_row + 1):
-                        for c in range(1, ws.max_column + 1):
+                    for i in range(2, ws.max_row + 1):
+                        val = ws.cell(i, col_index).value
+                        if val:
+                            nums = set()
 
-                            val = ws.cell(r, c).value
-                            if c != col_index or not val:
-                                worksheet.write(r-1, c-1, val)
-                                continue
+                            for num in re.findall(r"\d+", str(val)):
+                                if len(num) == 3:
+                                    num = "0" + num
+                                if len(num) == 4:
+                                    nums.add(num)
 
-                            text = str(val)
-                            parts = []
-                            last = 0
-
-                            for m in re.finditer(r"\d+", text):
-                                num = m.group()
-                                start, end = m.span()
-
-                                check = "0"+num if len(num)==3 else num
-
-                                color_format = None
-                                for idx, g in enumerate(group_list):
-                                    if check in g:
-                                        color_format = formats[idx]
-                                        break
-
-                                if start > last:
-                                    parts += [normal, text[last:start]]
-
-                                if color_format:
-                                    parts += [color_format, num]
+                            for idx, g in enumerate(group_list):
+                                if nums & g:
+                                    ws.cell(i, col_index).fill = group_colors[idx]
                                     count += 1
-                                else:
-                                    parts += [normal, num]
+                                    break
 
-                                last = end
+                    ws.sheet_view.selection = [Selection(activeCell="A1", sqref="A1")]
+                    ws.sheet_view.topLeftCell = "A1"
 
-                            if last < len(text):
-                                parts += [normal, text[last:]]
-
-                            try:
-                                worksheet.write_rich_string(r-1, c-1, *parts)
-                            except:
-                                worksheet.write(r-1, c-1, text)
-
-                    workbook.close()
+                    wb.save(save_path)
                     wb.close()
 
                     # =========================
-                    # KE HOACH (GIỮ NGUYÊN)
+                    # KE HOACH (ĐÃ BỎ LEGEND)
                     # =========================
                     workbook = xlsxwriter.Workbook(kehoach_path)
                     worksheet = workbook.add_worksheet()
@@ -266,10 +257,6 @@ with st.container():
                     normal = workbook.add_format({})
 
                     col_width = 0
-
-                    ketqua_numbers = set()
-                    for g in group_list:
-                        ketqua_numbers |= g
 
                     for r, row in df2.iterrows():
                         text = "" if pd.isna(row.iloc[0]) else str(row.iloc[0])
@@ -301,7 +288,6 @@ with st.container():
 
                     workbook.close()
 
-                    # ZIP
                     zip_path = os.path.join(tmp_dir, "TPN_COMPLETE.zip")
                     with zipfile.ZipFile(zip_path, "w") as z:
                         z.write(save_path, "TPN_KET_QUA.xlsx")
