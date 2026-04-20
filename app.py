@@ -194,14 +194,17 @@ with st.container():
 
                     ketqua_numbers = set()
 
+                    # ✅ FIX: chỉ lấy 4 số cuối
                     for i in range(2, ws.max_row + 1):
                         val = ws.cell(i, col_index).value
                         if val:
-                            for num in re.findall(r"\d+", str(val)):
-                                if len(num) == 3:
-                                    num = "0" + num
-                                if len(num) == 4:
-                                    ketqua_numbers.add(num)
+                            nums = re.findall(r"\d+", str(val))
+                            if nums:
+                                last_num = nums[-1]
+                                if len(last_num) == 3:
+                                    last_num = "0" + last_num
+                                if len(last_num) == 4:
+                                    ketqua_numbers.add(last_num)
 
                     pastel_colors = generate_distinct_colors(len(group_list))
                     group_colors = {
@@ -224,16 +227,19 @@ with st.container():
 
                     count = 0
 
+                    # ✅ FIX: chỉ lấy 4 số cuối khi tô màu
                     for i in range(2, ws.max_row + 1):
                         val = ws.cell(i, col_index).value
                         if val:
                             nums = set()
+                            found_nums = re.findall(r"\d+", str(val))
 
-                            for num in re.findall(r"\d+", str(val)):
-                                if len(num) == 3:
-                                    num = "0" + num
-                                if len(num) == 4:
-                                    nums.add(num)
+                            if found_nums:
+                                last_num = found_nums[-1]
+                                if len(last_num) == 3:
+                                    last_num = "0" + last_num
+                                if len(last_num) == 4:
+                                    nums.add(last_num)
 
                             for idx, g in enumerate(group_list):
                                 if nums & g:
@@ -248,7 +254,7 @@ with st.container():
                     wb.close()
 
                     # =========================
-                    # KE HOACH (ĐÃ BỎ LEGEND)
+                    # KE HOACH
                     # =========================
                     workbook = xlsxwriter.Workbook(kehoach_path)
                     worksheet = workbook.add_worksheet()
