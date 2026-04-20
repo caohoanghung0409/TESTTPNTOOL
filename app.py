@@ -11,6 +11,7 @@ import colorsys
 from openpyxl import Workbook
 from openpyxl.styles import PatternFill, Font
 from openpyxl.worksheet.views import Selection
+from openpyxl.utils import get_column_letter
 
 st.set_page_config(page_title="THL TO SM", layout="centered")
 
@@ -73,6 +74,23 @@ def generate_distinct_colors(n):
     return base + colors
 
 # =========================
+# AUTO COLUMN WIDTH FIX
+# =========================
+def auto_adjust_column_width(ws):
+    for col in ws.columns:
+        max_length = 0
+        col_letter = get_column_letter(col[0].column)
+
+        for cell in col:
+            try:
+                if cell.value:
+                    max_length = max(max_length, len(str(cell.value)))
+            except:
+                pass
+
+        ws.column_dimensions[col_letter].width = max_length + 2
+
+# =========================
 # HEADER
 # =========================
 st.markdown("""
@@ -115,7 +133,6 @@ with st.container():
                         with open(path, "wb") as f:
                             f.write(file.read())
 
-                        # 🔥 FIX: dùng calamine (không đọc style Excel nữa)
                         df_check = pd.read_excel(path, engine="calamine", dtype=str)
 
                         if any("Shipment Nbr" in str(c) for c in df_check.columns):
@@ -146,22 +163,10 @@ with st.container():
                             group_list.append(nums)
 
                     # =========================
-                    # TPN DATA (SAFE)
+                    # TPN DATA (CLEAN)
                     # =========================
                     df_tpn = pd.read_excel(path_tpn, engine="calamine", dtype=str)
 
-                    col_name = None
-                    for c in df_tpn.columns:
-                        if "Shipment Nbr" in str(c):
-                            col_name = c
-                            break
-
-                    if col_name is None:
-                        raise Exception("Không tìm thấy cột Shipment Nbr")
-
-                    # =========================
-                    # BUILD CLEAN WORKBOOK
-                    # =========================
                     wb = Workbook()
                     ws = wb.active
 
@@ -170,7 +175,9 @@ with st.container():
                     for _, r in df_tpn.iterrows():
                         ws.append(list(r.values))
 
-                    # find column index
+                    # =========================
+                    # FIND COL
+                    # =========================
                     col_index = None
                     for idx, c in enumerate(ws[1], start=1):
                         if "Shipment Nbr" in str(c.value):
@@ -180,7 +187,7 @@ with st.container():
                     ketqua_numbers = set()
 
                     # =========================
-                    # GET LAST 4 DIGITS
+                    # LAST 4 DIGITS
                     # =========================
                     for i in range(2, ws.max_row + 1):
                         val = ws.cell(i, col_index).value
@@ -242,6 +249,11 @@ with st.container():
                                     break
 
                     ws.sheet_view.selection = [Selection(activeCell="A1", sqref="A1")]
+
+                    # =========================
+                    # 🔥 AUTO COLUMN WIDTH FIX HERE
+                    # =========================
+                    auto_adjust_column_width(ws)
 
                     wb.save(save_path)
                     wb.close()
