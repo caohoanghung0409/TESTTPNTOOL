@@ -329,5 +329,3 @@ with st.container():
             st.rerun()
 
     st.markdown('</div>', unsafe_allow_html=True)
-
-code chạy ok nè, nhưng mình muốn TPN_KET_QUA format như file gốc, bạn có làm được kg?
