@@ -75,19 +75,16 @@ def generate_distinct_colors(n):
     return base + colors
 
 # =========================
-# 🔥 FIX ERP FILE (ROOT CAUSE FIX)
+# FIX ERP FILE (ROOT CAUSE FIX)
 # =========================
 def load_clean_excel(path):
-    """
-    Remove broken styles.xml from ERP Excel (CAUSE OF Fill ERROR)
-    """
     tmp_dir = os.path.join(tempfile.gettempdir(), f"clean_{uuid.uuid4().hex}")
     os.makedirs(tmp_dir, exist_ok=True)
 
     with zipfile.ZipFile(path, 'r') as zin:
         zin.extractall(tmp_dir)
 
-    # ❗ REMOVE BROKEN STYLE FILE
+    # ❗ remove broken styles
     style_path = os.path.join(tmp_dir, "xl", "styles.xml")
     if os.path.exists(style_path):
         os.remove(style_path)
@@ -109,7 +106,7 @@ def find_shipment_col(ws):
     return None
 
 # =========================
-# UI HEADER
+# HEADER
 # =========================
 st.markdown("""
 <div class="header">
@@ -119,7 +116,7 @@ st.markdown("""
 """, unsafe_allow_html=True)
 
 # =========================
-# CARD UI
+# UI CARD
 # =========================
 with st.container():
     st.markdown('<div class="card">', unsafe_allow_html=True)
@@ -144,14 +141,13 @@ with st.container():
                     path_tpn, path_book1 = None, None
 
                     # =========================
-                    # DETECT FILE
+                    # LOAD FILES
                     # =========================
                     for file in uploaded_files:
                         path = os.path.join(tmp_dir, file.name)
                         with open(path, "wb") as f:
                             f.write(file.read())
 
-                        # 🔥 FIX ERP READ
                         clean_path = load_clean_excel(path)
                         wb = load_workbook(clean_path, data_only=True)
                         header = [str(c.value) for c in wb.active[1]]
@@ -185,7 +181,7 @@ with st.container():
                             group_list.append(nums)
 
                     # =========================
-                    # LOAD TPN (CLEANED)
+                    # LOAD TPN
                     # =========================
                     wb = load_workbook(path_tpn, data_only=True)
                     ws = wb.active
@@ -194,18 +190,19 @@ with st.container():
                     ketqua_numbers = set()
 
                     # =========================
-                    # ONLY LAST 4 DIGITS
+                    # SAFE PARSE (FIX INDEX ERROR)
                     # =========================
                     for i in range(2, ws.max_row + 1):
                         val = ws.cell(i, col_index).value
-                        if val:
-                            found = re.findall(r"\d+", str(val))
-                            if found:
-                                last = found[-1]
-                                if len(last) == 3:
-                                    last = "0" + last
-                                if len(last) == 4:
-                                    ketqua_numbers.add(last)
+
+                        found = re.findall(r"\d+", str(val)) if val else []
+
+                        if len(found) > 0:
+                            last = found[-1]
+                            if len(last) == 3:
+                                last = "0" + last
+                            if len(last) == 4:
+                                ketqua_numbers.add(last)
 
                     pastel_colors = generate_distinct_colors(len(group_list))
                     group_colors = {
@@ -229,26 +226,26 @@ with st.container():
                     count = 0
 
                     # =========================
-                    # COLOR MATCH
+                    # COLOR MATCH SAFE
                     # =========================
                     for i in range(2, ws.max_row + 1):
                         val = ws.cell(i, col_index).value
-                        if val:
-                            nums = set()
-                            found = re.findall(r"\d+", str(val))
 
-                            if found:
-                                last = found[-1]
-                                if len(last) == 3:
-                                    last = "0" + last
-                                if len(last) == 4:
-                                    nums.add(last)
+                        found = re.findall(r"\d+", str(val)) if val else []
+                        nums = set()
 
-                            for idx, g in enumerate(group_list):
-                                if nums & g:
-                                    ws.cell(i, col_index).fill = group_colors[idx]
-                                    count += 1
-                                    break
+                        if len(found) > 0:
+                            last = found[-1]
+                            if len(last) == 3:
+                                last = "0" + last
+                            if len(last) == 4:
+                                nums.add(last)
+
+                        for idx, g in enumerate(group_list):
+                            if nums & g:
+                                ws.cell(i, col_index).fill = group_colors[idx]
+                                count += 1
+                                break
 
                     ws.sheet_view.selection = [Selection(activeCell="A1", sqref="A1")]
                     ws.sheet_view.topLeftCell = "A1"
@@ -297,7 +294,7 @@ with st.container():
                     workbook.close()
 
                     # =========================
-                    # ZIP OUTPUT
+                    # ZIP
                     # =========================
                     zip_path = os.path.join(tmp_dir, "TPN_COMPLETE.zip")
                     with zipfile.ZipFile(zip_path, "w") as z:
