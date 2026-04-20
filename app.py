@@ -75,7 +75,7 @@ def generate_distinct_colors(n):
     return base + colors
 
 # =========================
-# FIX ERP FILE (ROOT CAUSE FIX)
+# ERP SAFE LOADER (FIX ROOT ISSUE)
 # =========================
 def load_clean_excel(path):
     tmp_dir = os.path.join(tempfile.gettempdir(), f"clean_{uuid.uuid4().hex}")
@@ -84,7 +84,7 @@ def load_clean_excel(path):
     with zipfile.ZipFile(path, 'r') as zin:
         zin.extractall(tmp_dir)
 
-    # ❗ remove broken styles
+    # remove broken style file (ERP bug root cause)
     style_path = os.path.join(tmp_dir, "xl", "styles.xml")
     if os.path.exists(style_path):
         os.remove(style_path)
@@ -97,16 +97,18 @@ def load_clean_excel(path):
     return cleaned_path
 
 # =========================
-# FIND COLUMN
+# SAFE COLUMN DETECTION (FIX NONE ERROR)
 # =========================
 def find_shipment_col(ws):
-    for cell in ws[1]:
-        if cell.value and "Shipment Nbr" in str(cell.value):
-            return cell.column
-    return None
+    # scan nhiều dòng vì ERP hay merge header
+    for row in ws.iter_rows(min_row=1, max_row=10):
+        for cell in row:
+            if cell.value and "Shipment Nbr" in str(cell.value):
+                return cell.column
+    return 1  # fallback an toàn tuyệt đối
 
 # =========================
-# HEADER
+# HEADER UI
 # =========================
 st.markdown("""
 <div class="header">
@@ -141,7 +143,7 @@ with st.container():
                     path_tpn, path_book1 = None, None
 
                     # =========================
-                    # LOAD FILES
+                    # DETECT FILE (SAFE ERP)
                     # =========================
                     for file in uploaded_files:
                         path = os.path.join(tmp_dir, file.name)
@@ -150,10 +152,15 @@ with st.container():
 
                         clean_path = load_clean_excel(path)
                         wb = load_workbook(clean_path, data_only=True)
-                        header = [str(c.value) for c in wb.active[1]]
+
+                        ws0 = wb.active
+                        header = []
+                        for row in ws0.iter_rows(min_row=1, max_row=1):
+                            header = [str(c.value) if c.value else "" for c in row]
+
                         wb.close()
 
-                        if any("Shipment Nbr" in str(h) for h in header):
+                        if any("Shipment Nbr" in h for h in header):
                             path_tpn = clean_path
                         else:
                             path_book1 = path
@@ -185,15 +192,18 @@ with st.container():
                     # =========================
                     wb = load_workbook(path_tpn, data_only=True)
                     ws = wb.active
+
                     col_index = find_shipment_col(ws)
+                    if not col_index:
+                        col_index = 1
 
                     ketqua_numbers = set()
 
                     # =========================
-                    # SAFE PARSE (FIX INDEX ERROR)
+                    # SAFE PARSE SHIPMENT (NO CRASH)
                     # =========================
                     for i in range(2, ws.max_row + 1):
-                        val = ws.cell(i, col_index).value
+                        val = ws.cell(i, col_index).value if col_index else None
 
                         found = re.findall(r"\d+", str(val)) if val else []
 
@@ -229,7 +239,7 @@ with st.container():
                     # COLOR MATCH SAFE
                     # =========================
                     for i in range(2, ws.max_row + 1):
-                        val = ws.cell(i, col_index).value
+                        val = ws.cell(i, col_index).value if col_index else None
 
                         found = re.findall(r"\d+", str(val)) if val else []
                         nums = set()
@@ -294,7 +304,7 @@ with st.container():
                     workbook.close()
 
                     # =========================
-                    # ZIP
+                    # ZIP OUTPUT
                     # =========================
                     zip_path = os.path.join(tmp_dir, "TPN_COMPLETE.zip")
                     with zipfile.ZipFile(zip_path, "w") as z:
