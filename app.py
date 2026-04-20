@@ -74,15 +74,25 @@ def generate_distinct_colors(n):
     return base + colors
 
 # =========================
-# COPY COLUMN WIDTH
+# FIX COLUMN WIDTH (SAFE VERSION)
 # =========================
 def copy_column_width_from_source(src_path, ws_dst):
-    wb_src = load_workbook(src_path)
-    ws_src = wb_src.active
+    try:
+        wb_src = load_workbook(src_path, data_only=True, read_only=True)
+        ws_src = wb_src.worksheets[0]
 
-    for col_letter, dim in ws_src.column_dimensions.items():
-        if dim.width:
-            ws_dst.column_dimensions[col_letter].width = dim.width
+        for col_letter in ws_src.column_dimensions:
+            try:
+                width = ws_src.column_dimensions[col_letter].width
+                if width is not None:
+                    ws_dst.column_dimensions[col_letter].width = width
+            except:
+                continue
+
+        wb_src.close()
+
+    except Exception:
+        pass
 
 # =========================
 # HEADER
@@ -169,7 +179,7 @@ with st.container():
                         ws.append(list(r.values))
 
                     # =========================
-                    # FIND COL
+                    # FIND COLUMN
                     # =========================
                     col_index = None
                     for idx, c in enumerate(ws[1], start=1):
@@ -179,9 +189,6 @@ with st.container():
 
                     ketqua_numbers = set()
 
-                    # =========================
-                    # LAST 4 DIGITS
-                    # =========================
                     for i in range(2, ws.max_row + 1):
                         val = ws.cell(i, col_index).value
                         if val:
@@ -242,7 +249,7 @@ with st.container():
                     ws.sheet_view.selection = [Selection(activeCell="A1", sqref="A1")]
 
                     # =========================
-                    # 🔥 COPY COLUMN WIDTH (IMPORTANT FIX)
+                    # FIX: COPY COLUMN WIDTH
                     # =========================
                     copy_column_width_from_source(path_tpn, ws)
 
