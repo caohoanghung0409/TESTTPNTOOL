@@ -17,7 +17,7 @@ from openpyxl.worksheet.views import Selection
 st.set_page_config(page_title="THL TO SM", layout="centered")
 
 # =========================
-# CSS (GIỮ NGUYÊN GIAO DIỆN)
+# CSS (GIỮ NGUYÊN)
 # =========================
 st.markdown("""
 <style>
@@ -75,14 +75,22 @@ def generate_distinct_colors(n):
     return base + colors
 
 # =========================
-# SAFE LOAD
+# FIX ERP FILE (QUAN TRỌNG)
 # =========================
-def safe_load(path, read_only=False):
+def safe_load_erp(path):
     try:
-        return load_workbook(path, read_only=read_only, data_only=True, keep_links=False)
+        return load_workbook(path, data_only=True, keep_links=False)
     except:
-        return load_workbook(path, read_only=read_only, data_only=True, keep_links=False)
+        # rebuild file nếu ERP corrupt styles
+        tmp = path.replace(".xlsx", "_repaired.xlsx")
+        wb = load_workbook(path, data_only=True, keep_links=False)
+        wb.save(tmp)
+        wb.close()
+        return load_workbook(tmp, data_only=True, keep_links=False)
 
+# =========================
+# FIND COLUMN
+# =========================
 def find_shipment_col(ws):
     for cell in ws[1]:
         if cell.value and "Shipment Nbr" in str(cell.value):
@@ -90,7 +98,7 @@ def find_shipment_col(ws):
     return None
 
 # =========================
-# HEADER
+# HEADER UI
 # =========================
 st.markdown("""
 <div class="header">
@@ -100,7 +108,7 @@ st.markdown("""
 """, unsafe_allow_html=True)
 
 # =========================
-# UI CARD (RESTORED)
+# CARD UI
 # =========================
 with st.container():
     st.markdown('<div class="card">', unsafe_allow_html=True)
@@ -125,14 +133,14 @@ with st.container():
                     path_tpn, path_book1 = None, None
 
                     # =========================
-                    # LOAD FILES
+                    # DETECT FILE
                     # =========================
                     for file in uploaded_files:
                         path = os.path.join(tmp_dir, file.name)
                         with open(path, "wb") as f:
                             f.write(file.read())
 
-                        wb = safe_load(path, True)
+                        wb = safe_load_erp(path)
                         header = [str(c.value) for c in wb.active[1]]
                         wb.close()
 
@@ -163,14 +171,17 @@ with st.container():
                         if nums:
                             group_list.append(nums)
 
-                    wb = safe_load(path_tpn)
+                    # =========================
+                    # LOAD TPN (FIX ERP ERROR HERE)
+                    # =========================
+                    wb = safe_load_erp(path_tpn)
                     ws = wb.active
                     col_index = find_shipment_col(ws)
 
                     ketqua_numbers = set()
 
                     # =========================
-                    # FIX: CHỈ LẤY 4 SỐ CUỐI
+                    # ONLY LAST 4 DIGITS
                     # =========================
                     for i in range(2, ws.max_row + 1):
                         val = ws.cell(i, col_index).value
@@ -205,7 +216,7 @@ with st.container():
                     count = 0
 
                     # =========================
-                    # FIX MATCH COLOR
+                    # COLOR MATCH (FIXED)
                     # =========================
                     for i in range(2, ws.max_row + 1):
                         val = ws.cell(i, col_index).value
@@ -233,7 +244,7 @@ with st.container():
                     wb.close()
 
                     # =========================
-                    # KE HOACH
+                    # KE HOACH FILE
                     # =========================
                     workbook = xlsxwriter.Workbook(kehoach_path)
                     worksheet = workbook.add_worksheet()
