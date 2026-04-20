@@ -12,6 +12,7 @@ from openpyxl import Workbook
 from openpyxl.styles import PatternFill, Font
 from openpyxl.worksheet.views import Selection
 from openpyxl.utils import get_column_letter
+from datetime import datetime
 
 st.set_page_config(page_title="THL TO SM", layout="centered")
 
@@ -125,9 +126,6 @@ with st.container():
                     tmp_dir = tempfile.gettempdir()
                     path_tpn, path_book1 = None, None
 
-                    # =========================
-                    # SAVE FILES
-                    # =========================
                     for file in uploaded_files:
                         path = os.path.join(tmp_dir, file.name)
                         with open(path, "wb") as f:
@@ -143,9 +141,6 @@ with st.container():
                     save_path = os.path.join(tmp_dir, "TPN_KET_QUA.xlsx")
                     kehoach_path = os.path.join(tmp_dir, "TPN_KE_HOACH_XE.xlsx")
 
-                    # =========================
-                    # BOOK1
-                    # =========================
                     df2 = pd.read_excel(path_book1, engine="calamine", header=None, dtype=str)
 
                     group_list = []
@@ -162,9 +157,6 @@ with st.container():
                         if nums:
                             group_list.append(nums)
 
-                    # =========================
-                    # TPN DATA (CLEAN)
-                    # =========================
                     df_tpn = pd.read_excel(path_tpn, engine="calamine", dtype=str)
 
                     wb = Workbook()
@@ -176,19 +168,19 @@ with st.container():
                         ws.append(list(r.values))
 
                     # =========================
-                    # FIND COL
+                    # FIND COLS
                     # =========================
                     col_index = None
+                    date_col_index = None
+
                     for idx, c in enumerate(ws[1], start=1):
                         if "Shipment Nbr" in str(c.value):
                             col_index = idx
-                            break
+                        if "Shipment Date" in str(c.value):
+                            date_col_index = idx
 
                     ketqua_numbers = set()
 
-                    # =========================
-                    # LAST 4 DIGITS
-                    # =========================
                     for i in range(2, ws.max_row + 1):
                         val = ws.cell(i, col_index).value
                         if val:
@@ -200,9 +192,6 @@ with st.container():
                                 if len(last) == 4:
                                     ketqua_numbers.add(last)
 
-                    # =========================
-                    # COLORS
-                    # =========================
                     colors = generate_distinct_colors(len(group_list))
                     group_colors = {i: colors[i] for i in range(len(group_list))}
 
@@ -210,12 +199,10 @@ with st.container():
                     header_font = Font(color="FFFFFF", bold=True)
                     bold_font = Font(bold=True)
 
-                    # header style
                     for cell in ws[1]:
                         cell.fill = header_fill
                         cell.font = header_font
 
-                    # bold
                     for row in ws.iter_rows(min_row=2):
                         for cell in row:
                             if cell.value:
@@ -223,9 +210,6 @@ with st.container():
 
                     count = 0
 
-                    # =========================
-                    # MATCH + COLOR
-                    # =========================
                     for i in range(2, ws.max_row + 1):
                         val = ws.cell(i, col_index).value
                         if val:
@@ -251,16 +235,19 @@ with st.container():
                     ws.sheet_view.selection = [Selection(activeCell="A1", sqref="A1")]
 
                     # =========================
-                    # 🔥 AUTO COLUMN WIDTH FIX HERE
+                    # ⭐ FORMAT SHIPMENT DATE (ONLY CHANGE)
                     # =========================
+                    if date_col_index:
+                        for i in range(2, ws.max_row + 1):
+                            cell = ws.cell(i, date_col_index)
+                            if cell.value:
+                                cell.number_format = "DD/MM/YYYY"
+
                     auto_adjust_column_width(ws)
 
                     wb.save(save_path)
                     wb.close()
 
-                    # =========================
-                    # KE HOACH FILE
-                    # =========================
                     workbook = xlsxwriter.Workbook(kehoach_path)
                     worksheet = workbook.add_worksheet()
 
@@ -298,9 +285,6 @@ with st.container():
                     worksheet.set_column(0, 0, col_width + 3)
                     workbook.close()
 
-                    # =========================
-                    # ZIP
-                    # =========================
                     zip_path = os.path.join(tmp_dir, "TPN_COMPLETE.zip")
                     with zipfile.ZipFile(zip_path, "w") as z:
                         z.write(save_path, "TPN_KET_QUA.xlsx")
